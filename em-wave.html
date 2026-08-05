@@ -9,42 +9,77 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
-    #app { display: flex; width: 100vw; height: 100vh; }
-    #canvas-area { flex: 1; position: relative; }
-    #canvas-area canvas { display: block; width: 100%; height: 100%; }
-    #sidebar { width: 320px; padding: 20px; background: rgba(0,0,0,0.85); overflow-y: auto; border-left: 1px solid rgba(255,255,255,0.1); }
-    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #4fc3f7; }
-    .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
-    .slider-group { margin-bottom: 14px; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px);
+      min-width: 260px;
+      max-width: 340px;
+      padding: 20px;
+      background: rgba(0,0,0,0.85);
+      overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none;
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #4fc3f7;
+      font-size: 20px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100vh;
+        width: clamp(280px, 70vw, 360px);
+        box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+      }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) {
+      #sidebar { width: 85vw; }
+    }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #4fc3f7; }
+    .slider-group { margin-bottom: 16px; }
     .slider-group label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
-    .slider-group .val { color: #4fc3f7; font-family: monospace; min-width: 80px; text-align: right; }
+    .slider-group .val { color: #4fc3f7; font-family: monospace; }
     .slider-group input[type="range"] { width: 100%; accent-color: #4fc3f7; }
     .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .btn { padding: 7px 14px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.2s; }
+    .btn { padding: 8px 16px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; }
     .btn:hover { background: rgba(79,195,247,0.15); }
     .btn.active { background: rgba(79,195,247,0.25); }
-    .btn-pause { border-color: #ff9800; color: #ff9800; }
-    .btn-pause:hover { background: rgba(255,152,0,0.15); }
-    .btn-reset { border-color: #ef5350; color: #ef5350; }
-    .btn-reset:hover { background: rgba(239,83,80,0.15); }
-    .knowledge-card { margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .knowledge-card { margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
     .knowledge-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
     .knowledge-card p { font-size: 13px; line-height: 1.7; color: #ccc; }
-    .formula-block { margin: 6px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; text-align: center; }
-    .phenomena-list { padding-left: 16px; margin-top: 6px; }
-    .phenomena-list li { margin-bottom: 5px; font-size: 12px; color: #bbb; line-height: 1.6; }
-    .legend { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; }
-    .legend-e { color: #4fc3f7; }
-    .legend-b { color: #ff6e40; }
-    .legend-k { color: #66bb6a; }
-    .hint { font-size: 11px; color: #666; margin-top: 12px; font-style: italic; }
-    .katex { font-size: 1em !important; }
+    .formula { color: #4fc3f7; font-family: 'Times New Roman', serif; font-style: italic; }
+    .phenomena-list { padding-left: 16px; margin-top: 8px; }
+    .phenomena-list li { margin-bottom: 4px; font-size: 12px; color: #bbb; }
+    .legend { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
   </style>
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
     }
   }
   </script>
@@ -52,69 +87,61 @@
 <body>
   <div id="app">
     <div id="canvas-area"></div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
     <div id="sidebar">
       <div class="section-title">物理 · 电磁学 · 电磁波传播</div>
-      <div class="section-sub">3D动态波形仿真 | 拖拽旋转视角</div>
 
       <div class="legend">
-        <span class="legend-e">■ E 电场</span>
-        <span class="legend-b">■ B 磁场</span>
-        <span class="legend-k">■ k 传播方向</span>
+        <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7;"></div>电场 E</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ff7043;"></div>磁场 B</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#66bb6a;"></div>传播方向</div>
       </div>
 
-      <div style="margin-top:16px">
-        <div class="slider-group">
-          <label>波长 λ <span class="val" id="val-lambda">2.0 m</span></label>
-          <input type="range" id="sl-lambda" min="0.5" max="6" step="0.1" value="2.0">
-        </div>
-        <div class="slider-group">
-          <label>频率 f <span class="val" id="val-freq">150 MHz</span></label>
-          <input type="range" id="sl-freq" min="50" max="500" step="10" value="150">
-        </div>
-        <div class="slider-group">
-          <label>振幅 E₀ <span class="val" id="val-amp">1.0</span></label>
-          <input type="range" id="sl-amp" min="0.2" max="2.0" step="0.1" value="1.0">
-        </div>
-        <div class="slider-group">
-          <label>动画速度 <span class="val" id="val-speed">1.0x</span></label>
-          <input type="range" id="sl-speed" min="0.1" max="3.0" step="0.1" value="1.0">
-        </div>
+      <div class="slider-group">
+        <label>波长 λ <span class="val" id="val-wavelength">4.0</span> m</label>
+        <input type="range" id="slider-wavelength" min="1" max="10" step="0.1" value="4.0">
+      </div>
+      <div class="slider-group">
+        <label>频率 f <span class="val" id="val-frequency">1.0</span> Hz</label>
+        <input type="range" id="slider-frequency" min="0.1" max="3" step="0.1" value="1.0">
+      </div>
+      <div class="slider-group">
+        <label>振幅 E₀ <span class="val" id="val-amplitude">1.5</span></label>
+        <input type="range" id="slider-amplitude" min="0.3" max="3" step="0.1" value="1.5">
+      </div>
+      <div class="slider-group">
+        <label>动画速度 <span class="val" id="val-speed">1.0</span>x</label>
+        <input type="range" id="slider-speed" min="0.1" max="3" step="0.1" value="1.0">
       </div>
 
       <div class="btn-group">
-        <button class="btn btn-pause" id="btn-pause">暂停</button>
-        <button class="btn btn-reset" id="btn-reset">重置</button>
-        <button class="btn" id="btn-grid">网格: 开</button>
-        <button class="btn" id="btn-axes">坐标轴: 开</button>
+        <button class="btn active" id="btn-play">播放</button>
+        <button class="btn" id="btn-pause">暂停</button>
+        <button class="btn" id="btn-reset">重置</button>
       </div>
 
       <div class="knowledge-card">
         <h4>核心公式</h4>
-        <div class="formula-block" id="formula-e"></div>
-        <div class="formula-block" id="formula-b"></div>
-        <div class="formula-block" id="formula-c"></div>
+        <div id="formula-e"></div>
+        <div id="formula-b" style="margin-top:8px;"></div>
+        <div id="formula-c" style="margin-top:8px;"></div>
       </div>
-
       <div class="knowledge-card">
         <h4>观察要点</h4>
         <ul class="phenomena-list">
-          <li>E 场（蓝色）沿 y 方向振动，B 场（橙色）沿 z 方向振动</li>
-          <li>E ⊥ B ⊥ k：电场、磁场、传播方向三者互相垂直</li>
-          <li>调节波长：波长越短，空间中波形越密集</li>
-          <li>调节频率：频率越高，波峰移动速度越快</li>
-          <li>波长与频率乘积恒等于波速 c（真空中）</li>
+          <li>电场E和磁场B始终相互垂直，且都垂直于传播方向</li>
+          <li>E和B同相位振荡，振幅比满足 E₀/B₀ = c</li>
+          <li>增大波长→波形变疏，增大频率→波形运动加快</li>
+          <li>拖拽画面可旋转视角，滚轮缩放</li>
         </ul>
       </div>
-
       <div class="knowledge-card">
         <h4>常见误解</h4>
         <ul class="phenomena-list">
-          <li>电场和磁场不是"先后产生"的，而是同相振荡、同时存在</li>
-          <li>电磁波不需要介质传播，在真空中速度为 c ≈ 3×10⁸ m/s</li>
+          <li>电场和磁场不是交替产生，而是同时存在、同相振荡</li>
+          <li>电磁波传播不需要介质，可在真空中传播</li>
         </ul>
       </div>
-
-      <div class="hint">提示：拖拽画面可旋转3D视角，滚轮缩放</div>
     </div>
   </div>
 
@@ -122,342 +149,294 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+    // === 侧边栏折叠控制 ===
+    const toggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+    if (window.innerWidth <= 600) sidebar.classList.add('collapsed');
+    toggle.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      toggle.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
+    });
+
+    // === KaTeX公式渲染 ===
+    function renderKatex(id, latex) {
+      const el = document.getElementById(id);
+      if (el && typeof katex !== 'undefined') {
+        katex.render(latex, el, { throwOnError: false, displayMode: true });
+      }
+    }
+    renderKatex('formula-e', 'E = E_0 \\cos(kx - \\omega t)');
+    renderKatex('formula-b', 'B = B_0 \\cos(kx - \\omega t)');
+    renderKatex('formula-c', 'c = \\lambda f = \\frac{1}{\\sqrt{\\mu_0 \\varepsilon_0}}');
+
     // === 数值安全守卫 ===
     function safeVal(v) { return isFinite(v) ? v : 0; }
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    // === 参数定义 ===
-    const params = {
-      lambda: 2.0,    // 波长 (m)
-      freq: 150,      // 频率 (MHz)
-      amp: 1.0,       // 振幅
-      speed: 1.0,     // 动画速度倍率
-      paused: false,
-      showGrid: true,
-      showAxes: true,
-    };
+    // === 参数 ===
+    let wavelength = 4.0;
+    let frequency = 1.0;
+    let amplitude = 1.5;
+    let speed = 1.0;
+    let playing = true;
+    let time = 0;
 
-    // === 渲染器初始化 ===
-    const container = document.getElementById('canvas-area');
+    const sliderWavelength = document.getElementById('slider-wavelength');
+    const sliderFrequency = document.getElementById('slider-frequency');
+    const sliderAmplitude = document.getElementById('slider-amplitude');
+    const sliderSpeed = document.getElementById('slider-speed');
+
+    sliderWavelength.addEventListener('input', () => {
+      wavelength = clamp(parseFloat(sliderWavelength.value), 1, 10);
+      document.getElementById('val-wavelength').textContent = wavelength.toFixed(1);
+    });
+    sliderFrequency.addEventListener('input', () => {
+      frequency = clamp(parseFloat(sliderFrequency.value), 0.1, 3);
+      document.getElementById('val-frequency').textContent = frequency.toFixed(1);
+    });
+    sliderAmplitude.addEventListener('input', () => {
+      amplitude = clamp(parseFloat(sliderAmplitude.value), 0.3, 3);
+      document.getElementById('val-amplitude').textContent = amplitude.toFixed(1);
+    });
+    sliderSpeed.addEventListener('input', () => {
+      speed = clamp(parseFloat(sliderSpeed.value), 0.1, 3);
+      document.getElementById('val-speed').textContent = speed.toFixed(1);
+    });
+
+    document.getElementById('btn-play').addEventListener('click', () => {
+      playing = true;
+      document.getElementById('btn-play').classList.add('active');
+      document.getElementById('btn-pause').classList.remove('active');
+    });
+    document.getElementById('btn-pause').addEventListener('click', () => {
+      playing = false;
+      document.getElementById('btn-pause').classList.add('active');
+      document.getElementById('btn-play').classList.remove('active');
+    });
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      time = 0;
+      playing = true;
+      wavelength = 4.0; sliderWavelength.value = 4.0;
+      frequency = 1.0; sliderFrequency.value = 1.0;
+      amplitude = 1.5; sliderAmplitude.value = 1.5;
+      speed = 1.0; sliderSpeed.value = 1.0;
+      document.getElementById('val-wavelength').textContent = '4.0';
+      document.getElementById('val-frequency').textContent = '1.0';
+      document.getElementById('val-amplitude').textContent = '1.5';
+      document.getElementById('val-speed').textContent = '1.0';
+      document.getElementById('btn-play').classList.add('active');
+      document.getElementById('btn-pause').classList.remove('active');
+    });
+
+    // === Three.js场景初始化 ===
+    const canvasArea = document.getElementById('canvas-area');
+    const w = canvasArea.clientWidth, h = canvasArea.clientHeight;
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a1a);
+    scene.fog = new THREE.FogExp2(0x0a0a1a, 0.02);
 
-    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-    camera.position.set(6, 4, 8);
+    const camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 200);
+    camera.position.set(6, 5, 10);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(renderer.domElement);
+    canvasArea.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 0, 0);
+    controls.minDistance = 3;
+    controls.maxDistance = 30;
 
-    // === 场景构建 ===
-
-    // 环境光
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    dirLight.position.set(5, 10, 7);
+    // === 光照 ===
+    const ambientLight = new THREE.AmbientLight(0x404060, 1.2);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 8, 5);
     scene.add(dirLight);
 
-    // 网格
-    const gridHelper = new THREE.GridHelper(20, 20, 0x333355, 0x222244);
-    gridHelper.position.y = -2;
+    // === 网格地面 ===
+    const gridHelper = new THREE.GridHelper(20, 20, 0x1a1a3a, 0x1a1a3a);
+    gridHelper.position.y = -2.5;
     scene.add(gridHelper);
 
-    // 坐标轴
-    const axesGroup = new THREE.Group();
+    // === 坐标轴（传播方向） ===
+    const axisLen = 10;
+    // X轴 - 传播方向（绿色）
+    const axisMatX = new THREE.LineBasicMaterial({ color: 0x66bb6a });
+    const axisGeoX = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-axisLen/2, 0, 0),
+      new THREE.Vector3(axisLen/2, 0, 0)
+    ]);
+    scene.add(new THREE.Line(axisGeoX, axisMatX));
 
-    function createAxis(dir, color, label) {
-      const len = 8;
-      const points = [new THREE.Vector3(0,0,0), dir.clone().multiplyScalar(len)];
-      const geo = new THREE.BufferGeometry().setFromPoints(points);
-      const mat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
-      const line = new THREE.Line(geo, mat);
-      axesGroup.add(line);
+    // 传播方向箭头
+    const arrowDir = new THREE.Vector3(1, 0, 0);
+    const arrowOrigin = new THREE.Vector3(axisLen/2, 0, 0);
+    const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowOrigin, 0.8, 0x66bb6a, 0.3, 0.2);
+    scene.add(arrowHelper);
 
-      // 箭头
-      const arrowGeo = new THREE.ConeGeometry(0.08, 0.3, 8);
-      const arrowMat = new THREE.MeshBasicMaterial({ color });
-      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-      arrow.position.copy(dir.clone().multiplyScalar(len));
-      if (dir.x > 0) arrow.rotation.z = -Math.PI / 2;
-      else if (dir.z > 0) arrow.rotation.x = Math.PI / 2;
-      // y方向默认朝上不需旋转
-      axesGroup.add(arrow);
-    }
+    // === 波形参数 ===
+    const segCount = 300;
+    const xRange = 12;
 
-    createAxis(new THREE.Vector3(1,0,0), 0x66bb6a, 'k');  // 传播方向 x
-    createAxis(new THREE.Vector3(0,1,0), 0x4fc3f7, 'E');  // 电场方向 y
-    createAxis(new THREE.Vector3(0,0,1), 0xff6e40, 'B');   // 磁场方向 z
-    scene.add(axesGroup);
+    // 电场波形 (E - 沿Y轴振动, 蓝色)
+    const ePositions = new Float32Array(segCount * 3);
+    const eColors = new Float32Array(segCount * 3);
+    const eGeometry = new THREE.BufferGeometry();
+    eGeometry.setAttribute('position', new THREE.BufferAttribute(ePositions, 3));
+    eGeometry.setAttribute('color', new THREE.BufferAttribute(eColors, 3));
 
-    // === 电磁波波形 ===
-    const WAVE_POINTS = 400;
-    const WAVE_LENGTH = 12;  // 可见波传播范围
-
-    // 电场波形 (沿x传播, y方向振动)
-    const ePositions = new Float32Array(WAVE_POINTS * 3);
-    const eGeo = new THREE.BufferGeometry();
-    eGeo.setAttribute('position', new THREE.BufferAttribute(ePositions, 3));
-    const eMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
-    const eLine = new THREE.Line(eGeo, eMat);
+    const eLineMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 });
+    const eLine = new THREE.Line(eGeometry, eLineMat);
     scene.add(eLine);
 
-    // 电场填充面 (半透明)
-    const eFillPositions = new Float32Array(WAVE_POINTS * 2 * 3);
-    const eFillGeo = new THREE.BufferGeometry();
-    eFillGeo.setAttribute('position', new THREE.BufferAttribute(eFillPositions, 3));
-    const eFillMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
-    const eFillMesh = new THREE.Mesh(eFillGeo, eFillMat);
-    scene.add(eFillMesh);
+    // 磁场波形 (B - 沿Z轴振动, 橙色)
+    const bPositions = new Float32Array(segCount * 3);
+    const bColors = new Float32Array(segCount * 3);
+    const bGeometry = new THREE.BufferGeometry();
+    bGeometry.setAttribute('position', new THREE.BufferAttribute(bPositions, 3));
+    bGeometry.setAttribute('color', new THREE.BufferAttribute(bColors, 3));
 
-    // 磁场波形 (沿x传播, z方向振动)
-    const bPositions = new Float32Array(WAVE_POINTS * 3);
-    const bGeo = new THREE.BufferGeometry();
-    bGeo.setAttribute('position', new THREE.BufferAttribute(bPositions, 3));
-    const bMat = new THREE.LineBasicMaterial({ color: 0xff6e40, linewidth: 2 });
-    const bLine = new THREE.Line(bGeo, bMat);
+    const bLineMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 });
+    const bLine = new THREE.Line(bGeometry, bLineMat);
     scene.add(bLine);
 
-    // 磁场填充面
-    const bFillPositions = new Float32Array(WAVE_POINTS * 2 * 3);
-    const bFillGeo = new THREE.BufferGeometry();
-    bFillGeo.setAttribute('position', new THREE.BufferAttribute(bFillPositions, 3));
-    const bFillMat = new THREE.MeshBasicMaterial({ color: 0xff6e40, transparent: true, opacity: 0.08, side: THREE.DoubleSide });
-    const bFillMesh = new THREE.Mesh(bFillGeo, bFillMat);
-    scene.add(bFillMesh);
+    // === 场线（从波形到轴的垂直线） ===
+    const fieldLineCount = 40;
+    const eFieldPositions = new Float32Array(fieldLineCount * 6);
+    const bFieldPositions = new Float32Array(fieldLineCount * 6);
+    const eFieldGeo = new THREE.BufferGeometry();
+    eFieldGeo.setAttribute('position', new THREE.BufferAttribute(eFieldPositions, 3));
+    const bFieldGeo = new THREE.BufferGeometry();
+    bFieldGeo.setAttribute('position', new THREE.BufferAttribute(bFieldPositions, 3));
 
-    // 场矢量箭头（沿传播方向的E和B矢量指示）
-    const ARROW_COUNT = 20;
-    const eArrows = [];
-    const bArrows = [];
+    const eFieldMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.2 });
+    const bFieldMat = new THREE.LineBasicMaterial({ color: 0xff7043, transparent: true, opacity: 0.2 });
+    const eFieldLines = new THREE.LineSegments(eFieldGeo, eFieldMat);
+    const bFieldLines = new THREE.LineSegments(bFieldGeo, bFieldMat);
+    scene.add(eFieldLines);
+    scene.add(bFieldLines);
 
-    for (let i = 0; i < ARROW_COUNT; i++) {
-      // E场箭头 (蓝色)
-      const eArrow = new THREE.ArrowHelper(
-        new THREE.Vector3(0, 1, 0), new THREE.Vector3(0,0,0),
-        1, 0x4fc3f7, 0.15, 0.08
-      );
-      eArrow.visible = false;
-      scene.add(eArrow);
-      eArrows.push(eArrow);
-
-      // B场箭头 (橙色)
-      const bArrow = new THREE.ArrowHelper(
-        new THREE.Vector3(0, 0, 1), new THREE.Vector3(0,0,0),
-        1, 0xff6e40, 0.15, 0.08
-      );
-      bArrow.visible = false;
-      scene.add(bArrow);
-      bArrows.push(bArrow);
+    // === 传播方向粒子 ===
+    const particleCount = 60;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePos = new Float32Array(particleCount * 3);
+    const particleSizes = new Float32Array(particleCount);
+    for (let i = 0; i < particleCount; i++) {
+      particlePos[i * 3] = -xRange/2 + (i / particleCount) * xRange;
+      particlePos[i * 3 + 1] = 0;
+      particlePos[i * 3 + 2] = 0;
+      particleSizes[i] = 2.0;
     }
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+    particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
+    const particleMat = new THREE.PointsMaterial({
+      color: 0x66bb6a,
+      size: 0.06,
+      transparent: true,
+      opacity: 0.4,
+      sizeAttenuation: true
+    });
+    const particles = new THREE.Points(particleGeo, particleMat);
+    scene.add(particles);
 
-    // 传播方向指示线
-    const propPoints = [new THREE.Vector3(-WAVE_LENGTH/2, 0, 0), new THREE.Vector3(WAVE_LENGTH/2, 0, 0)];
-    const propGeo = new THREE.BufferGeometry().setFromPoints(propPoints);
-    const propMat = new THREE.LineDashedMaterial({ color: 0x66bb6a, dashSize: 0.2, gapSize: 0.1, transparent: true, opacity: 0.5 });
-    const propLine = new THREE.Line(propGeo, propMat);
-    propLine.computeLineDistances();
-    scene.add(propLine);
+    // === 更新函数 ===
+    function updateWave(t) {
+      const safeAmp = safeVal(amplitude);
+      const safeLambda = clamp(safeVal(wavelength), 0.1, 20);
+      const safeFreq = clamp(safeVal(frequency), 0.01, 10);
+      const k = (2 * Math.PI) / safeLambda;
+      const omega = 2 * Math.PI * safeFreq;
 
-    // === 物理更新 ===
-    let simTime = 0;
+      // 更新电场波形
+      for (let i = 0; i < segCount; i++) {
+        const x = -xRange/2 + (i / (segCount - 1)) * xRange;
+        const eVal = safeAmp * Math.cos(k * x - omega * t);
+        ePositions[i * 3] = safeVal(x);
+        ePositions[i * 3 + 1] = safeVal(eVal);
+        ePositions[i * 3 + 2] = 0;
 
-    function updateWaveforms(dt) {
-      if (params.paused) return;
-      const clampedDt = clamp(dt, 0, 0.05);
-      simTime += clampedDt * params.speed;
-
-      const lambda = clamp(params.lambda, 0.5, 6);
-      const amp = clamp(params.amp, 0.2, 2);
-      const k = safeVal(2 * Math.PI / lambda);
-      const omega = safeVal(k * 3.0); // 视觉化角频率，缩放让动画可观察
-
-      // 更新电场波形线
-      const ePos = eLine.geometry.attributes.position.array;
-      const bPos = bLine.geometry.attributes.position.array;
-
-      for (let i = 0; i < WAVE_POINTS; i++) {
-        const x = -WAVE_LENGTH / 2 + (WAVE_LENGTH * i) / (WAVE_POINTS - 1);
-        const phase = k * x - omega * simTime;
-        const eVal = safeVal(amp * Math.cos(phase));
-        const bVal = safeVal(amp * Math.cos(phase));
-
-        ePos[i * 3] = x;
-        ePos[i * 3 + 1] = eVal;
-        ePos[i * 3 + 2] = 0;
-
-        bPos[i * 3] = x;
-        bPos[i * 3 + 1] = 0;
-        bPos[i * 3 + 2] = bVal;
+        // 颜色：蓝→白渐变表示振幅
+        const intensity = Math.abs(eVal) / safeAmp;
+        eColors[i * 3] = safeVal(0.31 + 0.69 * intensity);
+        eColors[i * 3 + 1] = safeVal(0.76 + 0.24 * intensity);
+        eColors[i * 3 + 2] = safeVal(0.97);
       }
+      eGeometry.attributes.position.needsUpdate = true;
+      eGeometry.attributes.color.needsUpdate = true;
 
-      eLine.geometry.attributes.position.needsUpdate = true;
-      bLine.geometry.attributes.position.needsUpdate = true;
+      // 更新磁场波形
+      for (let i = 0; i < segCount; i++) {
+        const x = -xRange/2 + (i / (segCount - 1)) * xRange;
+        const bVal = safeAmp * Math.cos(k * x - omega * t);
+        bPositions[i * 3] = safeVal(x);
+        bPositions[i * 3 + 1] = 0;
+        bPositions[i * 3 + 2] = safeVal(bVal);
 
-      // 更新电场填充面（三角形带：底线 + 波形线）
-      const eFill = eFillMesh.geometry.attributes.position.array;
-      const bFill = bFillMesh.geometry.attributes.position.array;
-
-      for (let i = 0; i < WAVE_POINTS; i++) {
-        const x = -WAVE_LENGTH / 2 + (WAVE_LENGTH * i) / (WAVE_POINTS - 1);
-        const phase = k * x - omega * simTime;
-        const eVal = safeVal(amp * Math.cos(phase));
-        const bVal = safeVal(amp * Math.cos(phase));
-
-        // 电场填充：底边(y=0)和顶边(y=eVal)
-        const vi = i * 2;
-        eFill[vi * 3] = x;
-        eFill[vi * 3 + 1] = 0;
-        eFill[vi * 3 + 2] = 0;
-        eFill[(vi + 1) * 3] = x;
-        eFill[(vi + 1) * 3 + 1] = eVal;
-        eFill[(vi + 1) * 3 + 2] = 0;
-
-        // 磁场填充：底边(z=0)和顶边(z=bVal)
-        bFill[vi * 3] = x;
-        bFill[vi * 3 + 1] = 0;
-        bFill[vi * 3 + 2] = 0;
-        bFill[(vi + 1) * 3] = x;
-        bFill[(vi + 1) * 3 + 1] = 0;
-        bFill[(vi + 1) * 3 + 2] = bVal;
+        const intensity = Math.abs(bVal) / safeAmp;
+        bColors[i * 3] = safeVal(1.0);
+        bColors[i * 3 + 1] = safeVal(0.44 + 0.56 * intensity);
+        bColors[i * 3 + 2] = safeVal(0.26 + 0.74 * intensity);
       }
+      bGeometry.attributes.position.needsUpdate = true;
+      bGeometry.attributes.color.needsUpdate = true;
 
-      eFillMesh.geometry.attributes.position.needsUpdate = true;
-      eFillMesh.geometry.setDrawRange(0, WAVE_POINTS * 2 - 2);
-      bFillMesh.geometry.attributes.position.needsUpdate = true;
-      bFillMesh.geometry.setDrawRange(0, WAVE_POINTS * 2 - 2);
+      // 更新场线
+      const step = Math.max(1, Math.floor(segCount / fieldLineCount));
+      for (let i = 0; i < fieldLineCount; i++) {
+        const idx = Math.min(i * step, segCount - 1);
+        const x = ePositions[idx * 3];
+        const eY = ePositions[idx * 3 + 1];
+        const bZ = bPositions[idx * 3 + 2];
 
-      // 更新场矢量箭头
-      for (let i = 0; i < ARROW_COUNT; i++) {
-        const x = -WAVE_LENGTH / 2 + (WAVE_LENGTH * (i + 0.5)) / ARROW_COUNT;
-        const phase = k * x - omega * simTime;
-        const eVal = safeVal(amp * Math.cos(phase));
-        const bVal = safeVal(amp * Math.cos(phase));
+        eFieldPositions[i * 6] = safeVal(x);
+        eFieldPositions[i * 6 + 1] = 0;
+        eFieldPositions[i * 6 + 2] = 0;
+        eFieldPositions[i * 6 + 3] = safeVal(x);
+        eFieldPositions[i * 6 + 4] = safeVal(eY);
+        eFieldPositions[i * 6 + 5] = 0;
 
-        // E箭头
-        const eArrow = eArrows[i];
-        eArrow.position.set(x, 0, 0);
-        const eLen = Math.abs(eVal);
-        eArrow.setLength(clamp(eLen, 0.01, 3), clamp(eLen * 0.2, 0.01, 0.3), clamp(eLen * 0.1, 0.01, 0.15));
-        eArrow.setDirection(new THREE.Vector3(0, eVal >= 0 ? 1 : -1, 0));
-        eArrow.visible = eLen > 0.05;
-
-        // B箭头
-        const bArrow = bArrows[i];
-        bArrow.position.set(x, 0, 0);
-        const bLen = Math.abs(bVal);
-        bArrow.setLength(clamp(bLen, 0.01, 3), clamp(bLen * 0.2, 0.01, 0.3), clamp(bLen * 0.1, 0.01, 0.15));
-        bArrow.setDirection(new THREE.Vector3(0, 0, bVal >= 0 ? 1 : -1));
-        bArrow.visible = bLen > 0.05;
+        bFieldPositions[i * 6] = safeVal(x);
+        bFieldPositions[i * 6 + 1] = 0;
+        bFieldPositions[i * 6 + 2] = 0;
+        bFieldPositions[i * 6 + 3] = safeVal(x);
+        bFieldPositions[i * 6 + 4] = 0;
+        bFieldPositions[i * 6 + 5] = safeVal(bZ);
       }
+      eFieldGeo.attributes.position.needsUpdate = true;
+      bFieldGeo.attributes.position.needsUpdate = true;
     }
-
-    // === 窗口尺寸 ===
-    function resize() {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    }
-    window.addEventListener('resize', resize);
-    resize();
 
     // === 动画循环 ===
-    let prevTime = performance.now();
-
-    function animate() {
+    let lastTime = 0;
+    function animate(timestamp) {
       requestAnimationFrame(animate);
-      const now = performance.now();
-      const dt = (now - prevTime) / 1000;
-      prevTime = now;
+      let dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      dt = clamp(dt, 0, 0.05);
 
-      updateWaveforms(dt);
+      if (playing) {
+        time += dt * speed;
+      }
+
+      updateWave(time);
       controls.update();
       renderer.render(scene, camera);
     }
+    requestAnimationFrame(animate);
 
-    // === 交互绑定 ===
-    const slLambda = document.getElementById('sl-lambda');
-    const slFreq = document.getElementById('sl-freq');
-    const slAmp = document.getElementById('sl-amp');
-    const slSpeed = document.getElementById('sl-speed');
-
-    slLambda.addEventListener('input', () => {
-      params.lambda = clamp(parseFloat(slLambda.value), 0.5, 6);
-      document.getElementById('val-lambda').textContent = params.lambda.toFixed(1) + ' m';
+    // === resize处理 ===
+    window.addEventListener('resize', () => {
+      const w = canvasArea.clientWidth;
+      const h = canvasArea.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
     });
-
-    slFreq.addEventListener('input', () => {
-      params.freq = clamp(parseInt(slFreq.value), 50, 500);
-      document.getElementById('val-freq').textContent = params.freq + ' MHz';
-    });
-
-    slAmp.addEventListener('input', () => {
-      params.amp = clamp(parseFloat(slAmp.value), 0.2, 2.0);
-      document.getElementById('val-amp').textContent = params.amp.toFixed(1);
-    });
-
-    slSpeed.addEventListener('input', () => {
-      params.speed = clamp(parseFloat(slSpeed.value), 0.1, 3.0);
-      document.getElementById('val-speed').textContent = params.speed.toFixed(1) + 'x';
-    });
-
-    document.getElementById('btn-pause').addEventListener('click', function() {
-      params.paused = !params.paused;
-      this.textContent = params.paused ? '继续' : '暂停';
-      this.classList.toggle('active', params.paused);
-    });
-
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      simTime = 0;
-      params.lambda = 2.0; params.freq = 150; params.amp = 1.0; params.speed = 1.0;
-      slLambda.value = 2.0; slFreq.value = 150; slAmp.value = 1.0; slSpeed.value = 1.0;
-      document.getElementById('val-lambda').textContent = '2.0 m';
-      document.getElementById('val-freq').textContent = '150 MHz';
-      document.getElementById('val-amp').textContent = '1.0';
-      document.getElementById('val-speed').textContent = '1.0x';
-      params.paused = false;
-      document.getElementById('btn-pause').textContent = '暂停';
-      document.getElementById('btn-pause').classList.remove('active');
-    });
-
-    document.getElementById('btn-grid').addEventListener('click', function() {
-      params.showGrid = !params.showGrid;
-      gridHelper.visible = params.showGrid;
-      this.textContent = '网格: ' + (params.showGrid ? '开' : '关');
-    });
-
-    document.getElementById('btn-axes').addEventListener('click', function() {
-      params.showAxes = !params.showAxes;
-      axesGroup.visible = params.showAxes;
-      this.textContent = '坐标轴: ' + (params.showAxes ? '开' : '关');
-    });
-
-    // === KaTeX 公式渲染 ===
-    function renderFormulas() {
-      const fe = document.getElementById('formula-e');
-      const fb = document.getElementById('formula-b');
-      const fc = document.getElementById('formula-c');
-      try {
-        katex.render('\\vec{E} = E_0 \\cos(kx - \\omega t)\\,\\hat{y}', fe, { displayMode: true, throwOnError: false });
-        katex.render('\\vec{B} = B_0 \\cos(kx - \\omega t)\\,\\hat{z}', fb, { displayMode: true, throwOnError: false });
-        katex.render('c = \\lambda f = \\frac{\\omega}{k}', fc, { displayMode: true, throwOnError: false });
-      } catch(e) {
-        fe.textContent = 'E = E₀ cos(kx - ωt) ŷ';
-        fb.textContent = 'B = B₀ cos(kx - ωt) ẑ';
-        fc.textContent = 'c = λf = ω/k';
-      }
-    }
-    renderFormulas();
-
-    // === 启动 ===
-    animate();
   </script>
 </body>
 </html>
