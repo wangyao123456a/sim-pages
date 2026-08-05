@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>酯化反应 · 化学虚拟实验</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; }
+    #canvas-area canvas { display: block; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px); min-width: 260px; max-width: 340px;
+      padding: 20px; background: rgba(0,0,0,0.85); overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease; z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none; position: absolute; top: 12px; right: 12px; z-index: 20;
+      width: 40px; height: 40px; border-radius: 8px; background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.2); color: #4fc3f7; font-size: 20px;
+      cursor: pointer; align-items: center; justify-content: center; transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar { position: absolute; right: 0; top: 0; height: 100vh; width: clamp(280px, 70vw, 360px); box-shadow: -4px 0 20px rgba(0,0,0,0.5); }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) { #sidebar { width: 85vw; } }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #4fc3f7; }
+    .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+
+    /* 实验步骤进度条 */
+    .step-progress { display: flex; gap: 4px; margin-bottom: 16px; }
+    .step-dot { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); transition: background 0.4s; }
+    .step-dot.active { background: #4fc3f7; }
+    .step-dot.done { background: #66bb6a; }
+
+    /* 步骤卡片 */
+    .step-card { padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 3px solid #4fc3f7; margin-bottom: 12px; }
+    .step-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 6px; }
+    .step-card p { font-size: 13px; line-height: 1.6; color: #ccc; }
+
+    .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { padding: 8px 16px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.2s; }
+    .btn:hover { background: rgba(79,195,247,0.15); }
+    .btn.active { background: rgba(79,195,247,0.25); }
+    .btn-next { background: rgba(79,195,247,0.2); }
+    .btn-reset { border-color: #ef5350; color: #ef5350; }
+    .btn-reset:hover { background: rgba(239,83,80,0.15); }
+
+    .knowledge-card { margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .knowledge-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+    .formula-block { margin: 6px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; text-align: center; }
+    .phenomena-list { padding-left: 16px; margin-top: 6px; }
+    .phenomena-list li { margin-bottom: 5px; font-size: 12px; color: #bbb; line-height: 1.6; }
+    .hint { font-size: 11px; color: #666; margin-top: 12px; font-style: italic; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-area"></div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
+    <div id="sidebar">
+      <div class="section-title">化学 · 有机化学 · 酯化反应</div>
+      <div class="section-sub">3D虚拟实验 | 按步骤操作</div>
+
+      <div class="step-progress" id="step-progress">
+        <div class="step-dot active"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+      </div>
+
+      <div class="step-card" id="step-card">
+        <h4 id="step-title">第1步：检查装置</h4>
+        <p id="step-desc">检查圆底烧瓶、导管、酒精灯和收集试管是否完好连接。</p>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-next" id="btn-next">下一步 →</button>
+        <button class="btn btn-reset" id="btn-reset">重置实验</button>
+      </div>
+
+      <div class="knowledge-card">
+        <h4>核心方程式</h4>
+        <div class="formula-block" id="formula-1"></div>
+        <div class="formula-block" id="formula-2"></div>
+      </div>
+
+      <div class="knowledge-card">
+        <h4>观察要点</h4>
+        <ul class="phenomena-list">
+          <li>浓硫酸起催化剂和吸水剂双重作用</li>
+          <li>反应可逆，需及时蒸出产物推动正向反应</li>
+          <li>饱和Na₂CO₃溶液吸收乙醇和乙酸，并中和尾气</li>
+          <li>产物乙酸乙酯为有果香气味的无色液体</li>
+          <li>导管不能插入液面以下（防倒吸）</li>
+        </ul>
+      </div>
+
+      <div class="knowledge-card">
+        <h4>常见误解</h4>
+        <ul class="phenomena-list">
+          <li>浓硫酸不是反应物，是催化剂和吸水剂</li>
+          <li>酯化反应是可逆反应，不能100%转化</li>
+        </ul>
+      </div>
+
+      <div class="hint">提示：拖拽画面可旋转3D视角，滚轮缩放</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    // === 数值安全守卫 ===
+    function safeVal(v) { return isFinite(v) ? v : 0; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // === 实验状态机 ===
+    const STEPS = [
+      { title: '第1步：检查装置', desc: '检查圆底烧瓶、导管、酒精灯和收集试管是否完好连接。', duration: 0 },
+      { title: '第2步：加入试剂', desc: '向烧瓶中加入乙醇3mL、乙酸2mL，再缓慢加入浓硫酸2mL。', duration: 3 },
+      { title: '第3步：加热反应', desc: '点燃酒精灯，小火加热烧瓶，反应开始。', duration: 5 },
+      { title: '第4步：观察产物', desc: '导管口有液体滴出，收集试管中出现无色油状液体，有果香气味。', duration: 4 },
+      { title: '第5步：收集提纯', desc: '将收集液倒入饱和Na₂CO₃溶液中，振荡，分层后上层即乙酸乙酯。', duration: 3 },
+      { title: '第6步：整理器材', desc: '熄灭酒精灯，清洗玻璃器材，实验完成。', duration: 2 },
+    ];
+    let stepIdx = 0;
+    let stepTime = 0;
+    let animProgress = 0; // 0~1 当前步骤动画进度
+
+    // === 渲染器 ===
+    const container = document.getElementById('canvas-area');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a1a);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(4, 5, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    // CSS2D 标签渲染器
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.domElement.style.position = 'absolute';
+    labelRenderer.domElement.style.top = '0';
+    labelRenderer.domElement.style.left = '0';
+    labelRenderer.domElement.style.pointerEvents = 'none';
+    container.appendChild(labelRenderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 1.5, 0);
+
+    // === 光照 ===
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 8, 6);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    scene.add(dirLight);
+
+    // 点光源（酒精灯火焰用）
+    const flameLight = new THREE.PointLight(0xff8833, 0, 4);
+    flameLight.position.set(0, 0.3, 0);
+    scene.add(flameLight);
+
+    // === 材质 ===
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.3,
+      roughness: 0.05, metalness: 0, transmission: 0.9,
+      thickness: 0.5, ior: 1.5, side: THREE.DoubleSide,
+    });
+
+    const liquidEthanol = new THREE.MeshPhysicalMaterial({
+      color: 0xffccaa, transparent: true, opacity: 0.6,
+      roughness: 0.1, metalness: 0, transmission: 0.3, thickness: 0.2, ior: 1.36,
+    });
+
+    const liquidAcid = new THREE.MeshPhysicalMaterial({
+      color: 0xaaddff, transparent: true, opacity: 0.5,
+      roughness: 0.1, metalness: 0, transmission: 0.4, thickness: 0.2, ior: 1.33,
+    });
+
+    const liquidProduct = new THREE.MeshPhysicalMaterial({
+      color: 0xffeebb, transparent: true, opacity: 0.7,
+      roughness: 0.1, metalness: 0, transmission: 0.2, thickness: 0.3, ior: 1.37,
+    });
+
+    const sodiumCarbMat = new THREE.MeshPhysicalMaterial({
+      color: 0xccddff, transparent: true, opacity: 0.7,
+      roughness: 0.2, metalness: 0,
+    });
+
+    const benchMat = new THREE.MeshStandardMaterial({ color: 0x3a3a4a, roughness: 0.6, metalness: 0.1 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.3, metalness: 0.8 });
+
+    // === 实验台 ===
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(10, 0.15, 6), benchMat);
+    bench.position.y = -0.075;
+    bench.receiveShadow = true;
+    scene.add(bench);
+
+    // === 烧瓶（圆底） ===
+    const flaskGroup = new THREE.Group();
+
+    // 球体部分
+    const flaskBody = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.7),
+      glassMat
+    );
+    flaskBody.position.y = 0.7;
+    flaskGroup.add(flaskBody);
+
+    // 瓶颈
+    const flaskNeck = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.35, 0.8, 16, 1, true),
+      glassMat
+    );
+    flaskNeck.position.y = 1.5;
+    flaskGroup.add(flaskNeck);
+
+    // 液体（初始不可见，步骤2出现）
+    const liquidMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.62, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      liquidEthanol
+    );
+    liquidMesh.position.y = 0.65;
+    liquidMesh.visible = false;
+    flaskGroup.add(liquidMesh);
+
+    // 气泡（步骤3加热时）
+    const bubbleGeo = new THREE.SphereGeometry(0.03, 8, 8);
+    const bubbleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+    const bubbles = [];
+    for (let i = 0; i < 8; i++) {
+      const b = new THREE.Mesh(bubbleGeo, bubbleMat.clone());
+      b.visible = false;
+      b.userData = { speed: 0.3 + Math.random() * 0.3, phase: Math.random() * Math.PI * 2 };
+      flaskGroup.add(b);
+      bubbles.push(b);
+    }
+
+    flaskGroup.position.set(-1.5, 0.15, 0);
+    scene.add(flaskGroup);
+
+    // === 导管 ===
+    const tubePoints = [
+      new THREE.Vector3(-1.5, 2.0, 0),
+      new THREE.Vector3(-1.5, 2.5, 0),
+      new THREE.Vector3(-0.5, 2.8, 0),
+      new THREE.Vector3(0.5, 2.8, 0),
+      new THREE.Vector3(1.5, 2.5, 0),
+      new THREE.Vector3(1.5, 2.0, 0),
+    ];
+    const tubeCurve = new THREE.CatmullRomCurve3(tubePoints);
+    const tubeGeo = new THREE.TubeGeometry(tubeCurve, 40, 0.06, 8, false);
+    const tubeMesh = new THREE.Mesh(tubeGeo, glassMat);
+    scene.add(tubeMesh);
+
+    // === 收集试管 ===
+    const testTubeGroup = new THREE.Group();
+    const testTubeBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 1.5, 16, 1, true),
+      glassMat
+    );
+    testTubeBody.position.y = 0.75;
+    testTubeGroup.add(testTubeBody);
+
+    const testTubeBottom = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      glassMat
+    );
+    testTubeGroup.add(testTubeBottom);
+
+    // 产物液体（步骤4出现）
+    const productLiquid = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.16, 0.4, 16),
+      liquidProduct
+    );
+    productLiquid.position.y = 0.2;
+    productLiquid.visible = false;
+    testTubeGroup.add(productLiquid);
+
+    testTubeGroup.position.set(1.5, 0.5, 0);
+    scene.add(testTubeGroup);
+
+    // === Na₂CO₃ 收集烧杯（步骤5出现） ===
+    const beakerGroup = new THREE.Group();
+    beakerGroup.visible = false;
+    const beakerBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.45, 1.2, 16, 1, true),
+      glassMat.clone()
+    );
+    beakerBody.position.y = 0.6;
+    beakerGroup.add(beakerBody);
+
+    const beakerBottom = new THREE.Mesh(
+      new THREE.CircleGeometry(0.45, 16),
+      glassMat.clone()
+    );
+    beakerBottom.rotation.x = -Math.PI / 2;
+    beakerBottom.position.y = 0.01;
+    beakerGroup.add(beakerBottom);
+
+    const na2co3Liquid = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.44, 0.4, 0.7, 16),
+      sodiumCarbMat
+    );
+    na2co3Liquid.position.y = 0.4;
+    beakerGroup.add(na2co3Liquid);
+
+    // 酯层（步骤5出现）
+    const esterLayer = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.43, 0.43, 0.15, 16),
+      liquidProduct.clone()
+    );
+    esterLayer.position.y = 0.8;
+    esterLayer.visible = false;
+    beakerGroup.add(esterLayer);
+
+    beakerGroup.position.set(1.5, 0.5, 1.5);
+    scene.add(beakerGroup);
+
+    // === 酒精灯 ===
+    const lampGroup = new THREE.Group();
+
+    const lampBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.25, 0.3, 0.5, 16),
+      new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.5, metalness: 0.2 })
+    );
+    lampBody.position.y = 0.25;
+    lampGroup.add(lampBody);
+
+    const lampWick = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.15, 8),
+      new THREE.MeshStandardMaterial({ color: 0x333333 })
+    );
+    lampWick.position.y = 0.58;
+    lampGroup.add(lampWick);
+
+    // 火焰（步骤3出现）
+    const flameGroup = new THREE.Group();
+    flameGroup.visible = false;
+
+    const flameOuter = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.35, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.7 })
+    );
+    flameOuter.position.y = 0.17;
+    flameGroup.add(flameOuter);
+
+    const flameInner = new THREE.Mesh(
+      new THREE.ConeGeometry(0.04, 0.2, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.9 })
+    );
+    flameInner.position.y = 0.12;
+    flameGroup.add(flameInner);
+
+    flameGroup.position.y = 0.65;
+    lampGroup.add(flameGroup);
+    flameLight.position.copy(lampGroup.position);
+    flameLight.position.y += 1;
+
+    lampGroup.position.set(-1.5, 0.15, 0);
+    scene.add(lampGroup);
+
+    // === 试剂瓶（场景装饰，步骤2显示） ===
+    const reagentBottles = new THREE.Group();
+    reagentBottles.visible = false;
+
+    function makeBottle(color, label) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.5, 12), glassMat.clone());
+      body.position.y = 0.25;
+      g.add(body);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.1, 12), metalMat);
+      cap.position.y = 0.55;
+      g.add(cap);
+      const lq = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.3, 12),
+        new THREE.MeshPhysicalMaterial({ color, transparent: true, opacity: 0.6 }));
+      lq.position.y = 0.2;
+      g.add(lq);
+      return g;
+    }
+
+    const bottle1 = makeBottle(0xffccaa, '乙醇');
+    bottle1.position.set(-3.5, 0, -1);
+    const bottle2 = makeBottle(0xaaddff, '乙酸');
+    bottle2.position.set(-3.5, 0, 0);
+    const bottle3 = makeBottle(0xccccdd, '浓H₂SO₄');
+    bottle3.position.set(-3.5, 0, 1);
+    reagentBottles.add(bottle1, bottle2, bottle3);
+    scene.add(reagentBottles);
+
+    // === CSS2D 标签 ===
+    function addLabel(text, pos, parent) {
+      const el = document.createElement('div');
+      el.textContent = text;
+      el.style.cssText = 'background:rgba(0,0,0,0.7);color:#4fc3f7;padding:3px 8px;border-radius:4px;font-size:12px;white-space:nowrap;border:1px solid rgba(79,195,247,0.3);';
+      const label = new CSS2DObject(el);
+      label.position.copy(pos);
+      parent.add(label);
+      return label;
+    }
+
+    addLabel('圆底烧瓶', new THREE.Vector3(0, 2.2, 0), flaskGroup);
+    addLabel('导管', new THREE.Vector3(0, 3.1, 0), tubeMesh);
+    addLabel('收集试管', new THREE.Vector3(0, 2.0, 0), testTubeGroup);
+    addLabel('酒精灯', new THREE.Vector3(0, 0.8, 0.5), lampGroup);
+
+    // === 状态机控制 ===
+    function onStepEnter(idx) {
+      stepIdx = idx;
+      stepTime = 0;
+      animProgress = 0;
+      const s = STEPS[idx];
+      document.getElementById('step-title').textContent = s.title;
+      document.getElementById('step-desc').textContent = s.desc;
+
+      // 更新进度条
+      const dots = document.querySelectorAll('.step-dot');
+      dots.forEach((d, i) => {
+        d.className = 'step-dot' + (i < idx ? ' done' : i === idx ? ' active' : '');
+      });
+
+      // 按步骤控制3D场景
+      switch(idx) {
+        case 0: // 检查装置 - 所有初始状态
+          liquidMesh.visible = false;
+          flameGroup.visible = false;
+          flameLight.intensity = 0;
+          productLiquid.visible = false;
+          beakerGroup.visible = false;
+          reagentBottles.visible = false;
+          break;
+        case 1: // 加试剂
+          reagentBottles.visible = true;
+          liquidMesh.visible = true;
+          liquidMesh.scale.set(1, 0.1, 1);
+          break;
+        case 2: // 加热
+          reagentBottles.visible = false;
+          flameGroup.visible = true;
+          flameLight.intensity = 2;
+          liquidMesh.visible = true;
+          break;
+        case 3: // 观察
+          productLiquid.visible = true;
+          productLiquid.scale.set(1, 0.1, 1);
+          break;
+        case 4: // 收集
+          beakerGroup.visible = true;
+          esterLayer.visible = true;
+          esterLayer.scale.set(1, 0.1, 1);
+          break;
+        case 5: // 整理
+          flameGroup.visible = false;
+          flameLight.intensity = 0;
+          break;
+      }
+    }
+
+    // === 窗口尺寸 ===
+    function resize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      labelRenderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // === 动画循环 ===
+    let prevTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = clamp((now - prevTime) / 1000, 0, 0.05);
+      prevTime = now;
+
+      if (stepIdx < STEPS.length) {
+        stepTime += dt;
+        animProgress = clamp(stepTime / safeVal(STEPS[stepIdx].duration || 1), 0, 1);
+
+        // 液面动画
+        if (stepIdx === 1 && liquidMesh.visible) {
+          liquidMesh.scale.y = clamp(0.1 + animProgress * 0.9, 0.1, 1);
+        }
+        // 加热气泡
+        if (stepIdx === 2) {
+          bubbles.forEach((b, i) => {
+            b.visible = true;
+            const t = (stepTime * b.userData.speed + b.userData.phase) % 1;
+            b.position.set(
+              Math.sin(b.userData.phase) * 0.2,
+              0.3 + t * 0.8,
+              Math.cos(b.userData.phase) * 0.2
+            );
+            b.material.opacity = (1 - t) * 0.4;
+            b.scale.setScalar(0.5 + Math.sin(stepTime * 3 + i) * 0.3);
+          });
+          // 火焰抖动
+          flameOuter.scale.set(1 + Math.sin(stepTime * 8) * 0.1, 1 + Math.sin(stepTime * 6) * 0.15, 1);
+          flameInner.scale.set(1 + Math.sin(stepTime * 10) * 0.1, 1 + Math.cos(stepTime * 7) * 0.1, 1);
+          flameLight.intensity = 2 + Math.sin(stepTime * 5) * 0.3;
+        } else {
+          bubbles.forEach(b => b.visible = false);
+        }
+        // 产物出现
+        if (stepIdx === 3 && productLiquid.visible) {
+          productLiquid.scale.y = clamp(0.1 + animProgress * 0.9, 0.1, 1);
+        }
+        // Na₂CO₃ 分层
+        if (stepIdx === 4 && esterLayer.visible) {
+          esterLayer.scale.y = clamp(0.1 + animProgress * 0.9, 0.1, 1);
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+
+    // === 交互绑定 ===
+    document.getElementById('btn-next').addEventListener('click', () => {
+      if (stepIdx < STEPS.length - 1) {
+        onStepEnter(stepIdx + 1);
+      }
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      onStepEnter(0);
+    });
+
+    // === 侧边栏折叠 ===
+    (function() {
+      const toggle = document.getElementById('sidebar-toggle');
+      const sidebar = document.getElementById('sidebar');
+      if (window.innerWidth <= 600) sidebar.classList.add('collapsed');
+      toggle.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        this.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
+      });
+    })();
+
+    // === KaTeX 公式 ===
+    function renderFormulas() {
+      try {
+        katex.render('\\text{CH}_3\\text{COOH} + \\text{C}_2\\text{H}_5\\text{OH} \\xrightleftharpoons[\\Delta]{\\text{浓H}_2\\text{SO}_4} \\text{CH}_3\\text{COOC}_2\\text{H}_5 + \\text{H}_2\\text{O}', document.getElementById('formula-1'), { displayMode: true, throwOnError: false });
+        katex.render('\\text{乙醇} + \\text{乙酸} \\rightleftharpoons \\text{乙酸乙酯} + \\text{水}', document.getElementById('formula-2'), { displayMode: true, throwOnError: false });
+      } catch(e) {
+        document.getElementById('formula-1').textContent = 'CH₃COOH + C₂H₅OH ⇌ CH₃COOC₂H₅ + H₂O';
+        document.getElementById('formula-2').textContent = '乙酸 + 乙醇 ⇌ 乙酸乙酯 + 水';
+      }
+    }
+    renderFormulas();
+
+    // === 启动 ===
+    onStepEnter(0);
+    animate();
+  </script>
+</body>
+</html>
