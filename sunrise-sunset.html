@@ -236,24 +236,75 @@
     resize();
 
     // === 颜色系统 ===
-    function skyColor(alt) {
-      // 太阳高度角 -> 天空颜色
-      if (alt > 10) return { top: '#0a1a3a', mid: '#1a4a8a', bot: '#4a90d9' };
+    // 天空颜色同时受太阳高度角和一天中的时刻影响
+    function skyColor(alt, hour) {
+      // hour: 0~24 小时
+      // 计算时段因子：日出前后、上午、正午、下午、日落前后
+      var sunriseH = 6, sunsetH = 18; // 近似，后续会覆盖
+
+      // 用时角判断上午/下午
+      var isMorning = hour < 12;
+      var isAfternoon = hour >= 12;
+
+      // 白天不同时段的基础色调（alt > 10时的完整白天配色）
+      // 清晨暖调：天顶偏浅蓝，地平线偏暖白/橙
+      // 正午冷调：天顶深蓝，地平线偏白
+      // 傍晚暖调：天顶偏暗蓝/紫，地平线偏橙红
+
+      if (alt > 10) {
+        // 完整白天 —— 按时段渐变
+        // periodT: 0=清晨, 0.5=正午, 1=傍晚
+        var periodT = clamp((hour - 5) / 14, 0, 1); // 5:00→0, 19:00→1
+        if (isMorning) {
+          // 清晨 → 正午
+          var mt = clamp((hour - 5) / 7, 0, 1); // 5:00→0, 12:00→1
+          return {
+            top: lerpColor('#1a3a6a', '#0a1a4a', mt),
+            mid: lerpColor('#5a8ac0', '#1a5a9a', mt),
+            bot: lerpColor('#e8c878', '#8abcd8', mt)
+          };
+        } else {
+          // 正午 → 傍晚
+          var et = clamp((hour - 12) / 7, 0, 1); // 12:00→0, 19:00→1
+          return {
+            top: lerpColor('#0a1a4a', '#1a1a4a', et),
+            mid: lerpColor('#1a5a9a', '#6a3a6a', et),
+            bot: lerpColor('#8abcd8', '#d87830', et)
+          };
+        }
+      }
       if (alt > 0) {
+        // 太阳在地平线附近（0~10°）—— 日出/日落过渡
         var t = alt / 10;
-        return {
-          top: lerpColor('#0a0a2a', '#0a1a3a', t),
-          mid: lerpColor('#2a1a3a', '#1a4a8a', t),
-          bot: lerpColor('#cc5533', '#4a90d9', t)
-        };
+        if (isMorning) {
+          return {
+            top: lerpColor('#0a0a2a', lerpColor('#1a3a6a', '#0a1a4a', t / 10 * 7), t),
+            mid: lerpColor('#3a1a3a', lerpColor('#5a8ac0', '#1a5a9a', t / 10 * 7), t),
+            bot: lerpColor('#cc5533', lerpColor('#e8c878', '#8abcd8', t / 10 * 7), t)
+          };
+        } else {
+          return {
+            top: lerpColor('#0a0a2a', lerpColor('#1a1a4a', '#0a1a4a', 0.5), t),
+            mid: lerpColor('#3a1a3a', lerpColor('#6a3a6a', '#1a5a9a', 0.3), t),
+            bot: lerpColor('#cc3311', lerpColor('#d87830', '#8abcd8', 0.3), t)
+          };
+        }
       }
       if (alt > -6) { // 民用曙暮光
         var t = (alt + 6) / 6;
-        return {
-          top: lerpColor('#050510', '#0a0a2a', t),
-          mid: lerpColor('#0a0a1a', '#2a1a3a', t),
-          bot: lerpColor('#1a1020', '#cc5533', t)
-        };
+        if (isMorning) {
+          return {
+            top: lerpColor('#050510', '#0a0a2a', t),
+            mid: lerpColor('#0a0a1a', '#3a1a3a', t),
+            bot: lerpColor('#1a1020', '#cc5533', t)
+          };
+        } else {
+          return {
+            top: lerpColor('#050510', '#0a0a2a', t),
+            mid: lerpColor('#0a0a1a', '#3a1a3a', t),
+            bot: lerpColor('#1a0a10', '#cc3311', t)
+          };
+        }
       }
       if (alt > -12) { // 航海曙暮光
         var t = (alt + 12) / 6;
@@ -295,8 +346,8 @@
       var alt = sunAltitude(params.lat, decl, hourAngle);
       var az = sunAzimuth(params.lat, decl, hourAngle);
 
-      // 天空渐变
-      var colors = skyColor(alt);
+      // 天空渐变（传入高度角和时刻）
+      var colors = skyColor(alt, hour);
       var skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
       skyGrad.addColorStop(0, colors.top);
       skyGrad.addColorStop(0.5, colors.mid);
@@ -356,10 +407,25 @@
         ctx.globalAlpha = 1;
       }
 
-      // 地面
+      // 地面（随时刻变化）
+      var groundColor;
+      if (alt > 10) {
+        // 白天：上午偏暖绿，正午偏亮绿，下午偏暗绿
+        if (hour < 12) {
+          var gt = clamp((hour - 5) / 7, 0, 1);
+          groundColor = { top: lerpColor('#2a4a1a', '#1a5a1a', gt), bot: lerpColor('#1a3a0d', '#0d2a0d', gt) };
+        } else {
+          var gt = clamp((hour - 12) / 7, 0, 1);
+          groundColor = { top: lerpColor('#1a5a1a', '#1a3a1a', gt), bot: lerpColor('#0d2a0d', '#0a1a0a', gt) };
+        }
+      } else if (alt > 0) {
+        groundColor = { top: '#1a3a1a', bot: '#0d2a0d' };
+      } else {
+        groundColor = { top: '#0a0a0a', bot: '#050505' };
+      }
       var groundGrad = ctx.createLinearGradient(0, horizonY, 0, H);
-      groundGrad.addColorStop(0, alt > 0 ? '#1a3a1a' : '#0a0a0a');
-      groundGrad.addColorStop(1, alt > 0 ? '#0d2a0d' : '#050505');
+      groundGrad.addColorStop(0, groundColor.top);
+      groundGrad.addColorStop(1, groundColor.bot);
       ctx.fillStyle = groundGrad;
       ctx.fillRect(0, horizonY, W, H - horizonY);
 
