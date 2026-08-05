@@ -155,7 +155,7 @@
       if (cosH <= -1) return 24; // 极昼
       if (cosH >= 1) return 0;   // 极夜
       var H = deg(Math.acos(clamp(cosH, -1, 1)));
-      return safeVal(H / 15); // 时角转小时
+      return safeVal(2 * H / 15); // 时角转小时（乘2因为H只是半昼长）
     }
 
     function sunRiseSet(lat, decl) {
@@ -321,9 +321,19 @@
         ctx.globalAlpha = 1;
       }
 
-      // 太阳
-      var sunScreenX = W * 0.5 + (az / 180 - 0.5) * W * 0.8;
-      var sunScreenY = horizonY - (alt / 90) * horizonY * 0.9;
+      // 太阳屏幕坐标（基于太阳高度角和时角映射）
+      // 时角 -180~+180° → X轴从左到右（东→西）
+      // 高度角 -90~+90° → Y轴从下到上
+      var hourAngleDeg = clamp(hourAngle, -180, 180);
+      var sunNormX = 0.5 - hourAngleDeg / 360; // 东(负时角)在右，西(正时角)在左
+      var sunScreenX = W * sunNormX;
+      // Y映射：alt=0 → horizonY, alt=90 → horizonY * 0.05（接近顶部）
+      var altClamped = clamp(alt, -20, 90);
+      var sunNormY = altClamped > 0 ? altClamped / 90 : altClamped / 20; // 正值0~1，负值0~-1
+      var sunScreenY = horizonY - sunNormY * horizonY * 0.9;
+      // clamp确保太阳不超出天空区域太远（允许略低于地平线以显示刚落山的余晖）
+      sunScreenX = clamp(sunScreenX, -50, W + 50);
+      sunScreenY = clamp(sunScreenY, -30, H + 30);
 
       if (alt > -5) {
         // 太阳光晕
