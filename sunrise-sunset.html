@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日出日落原理 · 天际模拟器</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; }
+    #canvas-area canvas { display: block; width: 100%; height: 100%; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px); min-width: 260px; max-width: 340px;
+      padding: 20px; background: rgba(0,0,0,0.85); overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease; z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none; position: absolute; top: 12px; right: 12px; z-index: 20;
+      width: 40px; height: 40px; border-radius: 8px; background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.2); color: #4fc3f7; font-size: 20px;
+      cursor: pointer; align-items: center; justify-content: center; transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar { position: absolute; right: 0; top: 0; height: 100vh; width: clamp(280px, 70vw, 360px); box-shadow: -4px 0 20px rgba(0,0,0,0.5); }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) { #sidebar { width: 85vw; } }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #4fc3f7; }
+    .section-sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+    .slider-group { margin-bottom: 14px; }
+    .slider-group label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .slider-group .val { color: #4fc3f7; font-family: monospace; min-width: 80px; text-align: right; }
+    .slider-group input[type="range"] { width: 100%; accent-color: #4fc3f7; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { padding: 7px 14px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; transition: background 0.2s; }
+    .btn:hover { background: rgba(79,195,247,0.15); }
+    .btn.active { background: rgba(79,195,247,0.25); }
+    .btn-auto { border-color: #66bb6a; color: #66bb6a; }
+    .btn-auto:hover { background: rgba(102,187,106,0.15); }
+    .info-box { margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .info-box h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+    .info-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+    .info-row .label { color: #aaa; }
+    .info-row .value { color: #fff; font-family: monospace; }
+    .info-row .highlight { color: #ff9800; font-weight: 600; }
+    .formula-block { margin: 6px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; text-align: center; }
+    .phenomena-list { padding-left: 16px; margin-top: 6px; }
+    .phenomena-list li { margin-bottom: 5px; font-size: 12px; color: #bbb; line-height: 1.6; }
+    .hint { font-size: 11px; color: #666; margin-top: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-area">
+      <canvas id="sim-canvas"></canvas>
+    </div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
+    <div id="sidebar">
+      <div class="section-title">天文 · 地球运动 · 日出日落</div>
+      <div class="section-sub">天际模拟器 | 拖动滑块观察昼夜变化</div>
+
+      <div class="slider-group">
+        <label>观测纬度 φ <span class="val" id="val-lat">40.0°N</span></label>
+        <input type="range" id="sl-lat" min="-90" max="90" step="0.5" value="40">
+      </div>
+      <div class="slider-group">
+        <label>日期 <span class="val" id="val-date">6月21日</span></label>
+        <input type="range" id="sl-date" min="1" max="365" step="1" value="172">
+      </div>
+      <div class="slider-group">
+        <label>时刻 <span class="val" id="val-time">12:00</span></label>
+        <input type="range" id="sl-time" min="0" max="1440" step="1" value="720">
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-auto" id="btn-auto">自动播放</button>
+        <button class="btn" id="btn-reset">重置</button>
+      </div>
+
+      <div class="info-box">
+        <h4>当前数据</h4>
+        <div class="info-row"><span class="label">太阳赤纬 δ</span><span class="value" id="info-decl">+23.44°</span></div>
+        <div class="info-row"><span class="label">日出时刻</span><span class="value" id="info-rise">05:00</span></div>
+        <div class="info-row"><span class="label">日落时刻</span><span class="value" id="info-set">19:30</span></div>
+        <div class="info-row"><span class="label">昼长</span><span class="value" id="info-daylen">14h30m</span></div>
+        <div class="info-row"><span class="label">太阳高度角</span><span class="value" id="info-alt">72°</span></div>
+        <div class="info-row"><span class="label">状态</span><span class="value highlight" id="info-status">白天</span></div>
+      </div>
+
+      <div class="info-box">
+        <h4>核心公式</h4>
+        <div class="formula-block" id="formula-1"></div>
+        <div class="formula-block" id="formula-2"></div>
+      </div>
+
+      <div class="info-box">
+        <h4>观察要点</h4>
+        <ul class="phenomena-list">
+          <li>夏至（6月21日）北半球昼最长，冬至（12月22日）夜最长</li>
+          <li>纬度越高，昼夜长短差异越大</li>
+          <li>纬度 > 66.5° 时出现极昼或极夜</li>
+          <li>赤道全年昼夜等长（12h/12h）</li>
+          <li>春秋分时全球昼夜等长</li>
+        </ul>
+      </div>
+
+      <div class="info-box">
+        <h4>常见误解</h4>
+        <ul class="phenomena-list">
+          <li>日出日落不是地球绕太阳转，而是地球自转导致</li>
+          <li>夏天热不是因为离太阳近，而是太阳高度角大+昼长</li>
+        </ul>
+      </div>
+
+      <div class="hint">提示：拖动日期滑块可观察一年中昼夜长短的连续变化</div>
+    </div>
+  </div>
+
+  <script>
+    // === 侧边栏折叠 ===
+    (function() {
+      var toggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('sidebar');
+      if (window.innerWidth <= 600) sidebar.classList.add('collapsed');
+      toggle.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        this.textContent = sidebar.classList.contains('collapsed') ? '☰' : '✕';
+      });
+    })();
+
+    // === 数值安全 ===
+    function safeVal(v) { return isFinite(v) ? v : 0; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function deg(r) { return r * 180 / Math.PI; }
+    function rad(d) { return d * Math.PI / 180; }
+
+    // === 天文算法 ===
+    function solarDeclination(dayOfYear) {
+      // 简化公式：δ ≈ 23.44° × sin(360/365 × (N+284))
+      var N = clamp(dayOfYear, 1, 365);
+      return 23.44 * Math.sin(rad(360 / 365 * (N - 81)));
+    }
+
+    function dayLength(lat, decl) {
+      // cos(ω₀) = -tan(φ)·tan(δ)
+      var phi = rad(lat);
+      var delta = rad(decl);
+      var cosH = -Math.tan(phi) * Math.tan(delta);
+      if (cosH <= -1) return 24; // 极昼
+      if (cosH >= 1) return 0;   // 极夜
+      var H = deg(Math.acos(clamp(cosH, -1, 1)));
+      return safeVal(H / 15); // 时角转小时
+    }
+
+    function sunRiseSet(lat, decl) {
+      var phi = rad(lat);
+      var delta = rad(decl);
+      var cosH = -Math.tan(phi) * Math.tan(delta);
+      if (cosH <= -1) return { rise: null, set: null, polar: 'day' };   // 极昼
+      if (cosH >= 1) return { rise: null, set: null, polar: 'night' };  // 极夜
+      var H = deg(Math.acos(clamp(cosH, -1, 1)));
+      var riseH = 12 - H / 15;
+      var setH = 12 + H / 15;
+      return { rise: riseH, set: setH, polar: 'none' };
+    }
+
+    function sunAltitude(lat, decl, hourAngle) {
+      var phi = rad(lat);
+      var delta = rad(decl);
+      var H = rad(hourAngle);
+      var alt = Math.asin(Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(H));
+      return deg(alt);
+    }
+
+    function sunAzimuth(lat, decl, hourAngle) {
+      var phi = rad(lat);
+      var delta = rad(decl);
+      var H = rad(hourAngle);
+      var alt = Math.asin(Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(H));
+      var cosAz = (Math.sin(delta) - Math.sin(phi) * Math.sin(alt)) / (Math.cos(phi) * Math.cos(alt) + 1e-10);
+      var az = Math.acos(clamp(cosAz, -1, 1));
+      if (hourAngle > 0) az = 2 * Math.PI - az;
+      return deg(az);
+    }
+
+    // === 参数 ===
+    var params = {
+      lat: 40,
+      dayOfYear: 172,
+      minutes: 720,
+      autoPlay: false,
+      autoSpeed: 2, // 分钟/帧
+    };
+
+    // === 日期工具 ===
+    var MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    var MONTH_DAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
+    function dayToDateStr(d) {
+      var day = clamp(Math.round(d), 1, 365);
+      var total = 0;
+      for (var i = 0; i < 12; i++) {
+        if (day <= total + MONTH_DAYS[i]) {
+          return (i + 1) + '月' + (day - total) + '日';
+        }
+        total += MONTH_DAYS[i];
+      }
+      return '12月31日';
+    }
+    function minutesToStr(m) {
+      var hh = Math.floor(clamp(m, 0, 1440) / 60);
+      var mm = Math.floor(m % 60);
+      return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+    }
+    function hoursToStr(h) {
+      var hh = Math.floor(clamp(h, 0, 24));
+      var mm = Math.floor((h - Math.floor(h)) * 60);
+      return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+    }
+
+    // === Canvas 2D ===
+    var canvas = document.getElementById('sim-canvas');
+    var ctx = canvas.getContext('2d');
+
+    function resize() {
+      var container = document.getElementById('canvas-area');
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // === 颜色系统 ===
+    function skyColor(alt) {
+      // 太阳高度角 -> 天空颜色
+      if (alt > 10) return { top: '#0a1a3a', mid: '#1a4a8a', bot: '#4a90d9' };
+      if (alt > 0) {
+        var t = alt / 10;
+        return {
+          top: lerpColor('#0a0a2a', '#0a1a3a', t),
+          mid: lerpColor('#2a1a3a', '#1a4a8a', t),
+          bot: lerpColor('#cc5533', '#4a90d9', t)
+        };
+      }
+      if (alt > -6) { // 民用曙暮光
+        var t = (alt + 6) / 6;
+        return {
+          top: lerpColor('#050510', '#0a0a2a', t),
+          mid: lerpColor('#0a0a1a', '#2a1a3a', t),
+          bot: lerpColor('#1a1020', '#cc5533', t)
+        };
+      }
+      if (alt > -12) { // 航海曙暮光
+        var t = (alt + 12) / 6;
+        return {
+          top: lerpColor('#000005', '#050510', t),
+          mid: lerpColor('#000008', '#0a0a1a', t),
+          bot: lerpColor('#000010', '#1a1020', t)
+        };
+      }
+      return { top: '#000005', mid: '#000008', bot: '#000010' };
+    }
+
+    function lerpColor(a, b, t) {
+      var ar = parseInt(a.slice(1,3),16), ag = parseInt(a.slice(3,5),16), ab = parseInt(a.slice(5,7),16);
+      var br = parseInt(b.slice(1,3),16), bg = parseInt(b.slice(3,5),16), bb = parseInt(b.slice(5,7),16);
+      var r = Math.round(ar + (br - ar) * t);
+      var g = Math.round(ag + (bg - ag) * t);
+      var bl = Math.round(ab + (bb - ab) * t);
+      return '#' + (r<16?'0':'') + r.toString(16) + (g<16?'0':'') + g.toString(16) + (bl<16?'0':'') + bl.toString(16);
+    }
+
+    // === 星星 ===
+    var stars = [];
+    for (var i = 0; i < 200; i++) {
+      stars.push({ x: Math.random(), y: Math.random() * 0.7, r: Math.random() * 1.5 + 0.3, twinkle: Math.random() * Math.PI * 2 });
+    }
+
+    // === 渲染 ===
+    var simTime = 0;
+
+    function render() {
+      var W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+      if (W === 0 || H === 0) return;
+
+      var decl = solarDeclination(params.dayOfYear);
+      var hour = params.minutes / 60;
+      var hourAngle = (hour - 12) * 15; // 度
+      var alt = sunAltitude(params.lat, decl, hourAngle);
+      var az = sunAzimuth(params.lat, decl, hourAngle);
+
+      // 天空渐变
+      var colors = skyColor(alt);
+      var skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.65);
+      skyGrad.addColorStop(0, colors.top);
+      skyGrad.addColorStop(0.5, colors.mid);
+      skyGrad.addColorStop(1, colors.bot);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H * 0.65);
+
+      // 地平线
+      var horizonY = H * 0.65;
+
+      // 星星（夜晚可见）
+      var nightFactor = clamp(-alt / 12, 0, 1);
+      if (nightFactor > 0.1) {
+        stars.forEach(function(s) {
+          var twinkle = 0.5 + 0.5 * Math.sin(simTime * 2 + s.twinkle);
+          ctx.globalAlpha = nightFactor * twinkle * 0.8;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(s.x * W, s.y * horizonY, s.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      // 太阳
+      var sunScreenX = W * 0.5 + (az / 180 - 0.5) * W * 0.8;
+      var sunScreenY = horizonY - (alt / 90) * horizonY * 0.9;
+
+      if (alt > -5) {
+        // 太阳光晕
+        var glowR = 60 + alt * 2;
+        var sunGlow = ctx.createRadialGradient(sunScreenX, sunScreenY, 0, sunScreenX, sunScreenY, glowR);
+        var glowAlpha = clamp((alt + 5) / 15, 0, 0.6);
+        sunGlow.addColorStop(0, 'rgba(255,200,50,' + glowAlpha + ')');
+        sunGlow.addColorStop(0.5, 'rgba(255,150,30,' + (glowAlpha * 0.3) + ')');
+        sunGlow.addColorStop(1, 'rgba(255,100,20,0)');
+        ctx.fillStyle = sunGlow;
+        ctx.fillRect(sunScreenX - glowR, sunScreenY - glowR, glowR * 2, glowR * 2);
+
+        // 太阳圆盘
+        var sunAlpha = clamp((alt + 2) / 5, 0, 1);
+        ctx.globalAlpha = sunAlpha;
+        ctx.fillStyle = '#ffdd44';
+        ctx.beginPath();
+        ctx.arc(sunScreenX, sunScreenY, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // 地面
+      var groundGrad = ctx.createLinearGradient(0, horizonY, 0, H);
+      groundGrad.addColorStop(0, alt > 0 ? '#1a3a1a' : '#0a0a0a');
+      groundGrad.addColorStop(1, alt > 0 ? '#0d2a0d' : '#050505');
+      ctx.fillStyle = groundGrad;
+      ctx.fillRect(0, horizonY, W, H - horizonY);
+
+      // 地平线线
+      ctx.strokeStyle = alt > 0 ? 'rgba(100,180,100,0.3)' : 'rgba(50,50,50,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      ctx.lineTo(W, horizonY);
+      ctx.stroke();
+
+      // === 地球侧视图（左下角） ===
+      drawEarthDiagram(W * 0.18, H * 0.78, Math.min(W, H) * 0.14);
+
+      // === 昼夜弧线图（右下角） ===
+      drawArcDiagram(W * 0.75, H * 0.78, Math.min(W, H) * 0.14);
+    }
+
+    function drawEarthDiagram(cx, cy, r) {
+      r = Math.max(r, 10);
+      var decl = solarDeclination(params.dayOfYear);
+      var declRad = rad(decl);
+
+      // 地球圆盘
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.clip();
+
+      // 夜半球
+      ctx.fillStyle = '#0a0a2a';
+      ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+      // 昼半球（晨昏线右侧）
+      ctx.fillStyle = '#1a4a1a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // 晨昏线（倾斜）
+      var tilt = Math.sin(declRad) * r;
+      ctx.strokeStyle = '#ff9800';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + tilt, cy - r);
+      ctx.lineTo(cx + tilt, cy + r);
+      ctx.stroke();
+
+      ctx.restore();
+
+      // 地球轮廓
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 自转轴
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r - 5);
+      ctx.lineTo(cx, cy + r + 5);
+      ctx.stroke();
+
+      // 观测纬度标记
+      var latFrac = params.lat / 90;
+      var markerY = cy - latFrac * r;
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.arc(cx, markerY, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 标签
+      ctx.fillStyle = '#888';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('地球侧视', cx, cy + r + 18);
+      ctx.fillStyle = '#ff9800';
+      ctx.fillText('晨昏线', cx + tilt + 25, cy);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillText(Math.abs(params.lat).toFixed(0) + '°', cx + 10, markerY - 5);
+    }
+
+    function drawArcDiagram(cx, cy, r) {
+      r = Math.max(r, 10);
+      var decl = solarDeclination(params.dayOfYear);
+      var rs = sunRiseSet(params.lat, decl);
+      var dl = dayLength(params.lat, decl);
+
+      // 底圆（24小时轨道）
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 夜弧（上半部分 = 夜晚 18:00-06:00）
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI, 0);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(10,10,40,0.6)';
+      ctx.fill();
+      ctx.restore();
+
+      // 昼弧（下半部分 = 白天 06:00-18:00）
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(80,140,80,0.3)';
+      ctx.fill();
+      ctx.restore();
+
+      // 晨昏线位置
+      if (rs.polar === 'none' && rs.rise !== null) {
+        var riseAngle = Math.PI - (rs.rise / 24) * 2 * Math.PI;
+        var setAngle = Math.PI - (rs.set / 24) * 2 * Math.PI;
+
+        // 日出标记
+        var rx = cx + r * Math.cos(riseAngle);
+        var ry = cy + r * Math.sin(riseAngle);
+        ctx.fillStyle = '#ffaa33';
+        ctx.beginPath();
+        ctx.arc(rx, ry, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 日落标记
+        var sx = cx + r * Math.cos(setAngle);
+        var sy = cy + r * Math.sin(setAngle);
+        ctx.fillStyle = '#ff6633';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 当前时刻标记
+      var currentAngle = Math.PI - (params.minutes / 1440) * 2 * Math.PI;
+      var cpx = cx + r * Math.cos(currentAngle);
+      var cpy = cy + r * Math.sin(currentAngle);
+      ctx.fillStyle = '#4fc3f7';
+      ctx.beginPath();
+      ctx.arc(cpx, cpy, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 标签
+      ctx.fillStyle = '#888';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('昼夜弧线', cx, cy + r + 18);
+      ctx.font = '10px sans-serif';
+      ctx.fillText('0h', cx - r - 12, cy + 4);
+      ctx.fillText('6h', cx, cy + r + 4);
+      ctx.fillText('12h', cx + r + 14, cy + 4);
+      ctx.fillText('18h', cx, cy - r - 6);
+    }
+
+    // === 更新信息面板 ===
+    function updateInfo() {
+      var decl = solarDeclination(params.dayOfYear);
+      var rs = sunRiseSet(params.lat, decl);
+      var dl = dayLength(params.lat, decl);
+      var hour = params.minutes / 60;
+      var hourAngle = (hour - 12) * 15;
+      var alt = sunAltitude(params.lat, decl, hourAngle);
+
+      document.getElementById('val-lat').textContent = (params.lat >= 0 ? params.lat.toFixed(1) + '°N' : (-params.lat).toFixed(1) + '°S');
+      document.getElementById('val-date').textContent = dayToDateStr(params.dayOfYear);
+      document.getElementById('val-time').textContent = minutesToStr(params.minutes);
+
+      document.getElementById('info-decl').textContent = (decl >= 0 ? '+' : '') + decl.toFixed(2) + '°';
+
+      if (rs.polar === 'day') {
+        document.getElementById('info-rise').textContent = '极昼';
+        document.getElementById('info-set').textContent = '极昼';
+        document.getElementById('info-daylen').textContent = '24h0m';
+        document.getElementById('info-status').textContent = '极昼';
+        document.getElementById('info-status').className = 'value highlight';
+      } else if (rs.polar === 'night') {
+        document.getElementById('info-rise').textContent = '极夜';
+        document.getElementById('info-set').textContent = '极夜';
+        document.getElementById('info-daylen').textContent = '0h0m';
+        document.getElementById('info-status').textContent = '极夜';
+        document.getElementById('info-status').className = 'value highlight';
+      } else {
+        document.getElementById('info-rise').textContent = hoursToStr(rs.rise);
+        document.getElementById('info-set').textContent = hoursToStr(rs.set);
+        var dH = Math.floor(dl);
+        var dM = Math.floor((dl - dH) * 60);
+        document.getElementById('info-daylen').textContent = dH + 'h' + dM + 'm';
+        document.getElementById('info-status').textContent = alt > 0 ? '白天' : (alt > -6 ? '曙暮光' : '夜晚');
+        document.getElementById('info-status').className = 'value ' + (alt > 0 ? 'highlight' : '');
+      }
+
+      document.getElementById('info-alt').textContent = alt.toFixed(1) + '°';
+    }
+
+    // === 动画循环 ===
+    var prevTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      var now = performance.now();
+      var dt = clamp((now - prevTime) / 1000, 0, 0.05);
+      prevTime = now;
+      simTime += dt;
+
+      if (params.autoPlay) {
+        params.minutes += params.autoSpeed;
+        if (params.minutes >= 1440) params.minutes = 0;
+        document.getElementById('sl-time').value = Math.round(params.minutes);
+        updateInfo();
+      }
+
+      render();
+    }
+
+    // === 交互绑定 ===
+    document.getElementById('sl-lat').addEventListener('input', function() {
+      params.lat = parseFloat(this.value);
+      updateInfo();
+    });
+    document.getElementById('sl-date').addEventListener('input', function() {
+      params.dayOfYear = parseInt(this.value);
+      updateInfo();
+    });
+    document.getElementById('sl-time').addEventListener('input', function() {
+      params.minutes = parseInt(this.value);
+      updateInfo();
+    });
+
+    document.getElementById('btn-auto').addEventListener('click', function() {
+      params.autoPlay = !params.autoPlay;
+      this.textContent = params.autoPlay ? '暂停播放' : '自动播放';
+      this.classList.toggle('active', params.autoPlay);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', function() {
+      params.lat = 40; params.dayOfYear = 172; params.minutes = 720; params.autoPlay = false;
+      document.getElementById('sl-lat').value = 40;
+      document.getElementById('sl-date').value = 172;
+      document.getElementById('sl-time').value = 720;
+      document.getElementById('btn-auto').textContent = '自动播放';
+      document.getElementById('btn-auto').classList.remove('active');
+      updateInfo();
+    });
+
+    // === KaTeX ===
+    function renderFormulas() {
+      try {
+        katex.render('\\cos(\\omega_0) = -\\tan\\varphi \\cdot \\tan\\delta', document.getElementById('formula-1'), { displayMode: true, throwOnError: false });
+        katex.render('\\text{昼长} = \\frac{2\\omega_0}{15}\\text{ (小时)}', document.getElementById('formula-2'), { displayMode: true, throwOnError: false });
+      } catch(e) {
+        document.getElementById('formula-1').textContent = 'cos(ω₀) = -tan(φ)·tan(δ)';
+        document.getElementById('formula-2').textContent = '昼长 = 2ω₀/15 (小时)';
+      }
+    }
+    renderFormulas();
+
+    // === 启动 ===
+    updateInfo();
+    animate();
+  </script>
+</body>
+</html>
