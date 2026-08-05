@@ -263,21 +263,62 @@
     gridHelper.position.y = -2.5;
     scene.add(gridHelper);
 
-    // === 坐标轴（传播方向） ===
-    const axisLen = 10;
+    // === 坐标轴 ===
+    const axisLen = 6;
+
     // X轴 - 传播方向（绿色）
     const axisMatX = new THREE.LineBasicMaterial({ color: 0x66bb6a });
     const axisGeoX = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-axisLen/2, 0, 0),
-      new THREE.Vector3(axisLen/2, 0, 0)
+      new THREE.Vector3(-axisLen, 0, 0),
+      new THREE.Vector3(axisLen, 0, 0)
     ]);
     scene.add(new THREE.Line(axisGeoX, axisMatX));
+    scene.add(new THREE.ArrowHelper(
+      new THREE.Vector3(1, 0, 0), new THREE.Vector3(axisLen, 0, 0), 0.8, 0x66bb6a, 0.3, 0.2
+    ));
 
-    // 传播方向箭头
-    const arrowDir = new THREE.Vector3(1, 0, 0);
-    const arrowOrigin = new THREE.Vector3(axisLen/2, 0, 0);
-    const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowOrigin, 0.8, 0x66bb6a, 0.3, 0.2);
-    scene.add(arrowHelper);
+    // Y轴 - 电场E方向（蓝色）
+    const axisMatY = new THREE.LineBasicMaterial({ color: 0x4fc3f7 });
+    const axisGeoY = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, -3, 0),
+      new THREE.Vector3(0, 3, 0)
+    ]);
+    scene.add(new THREE.Line(axisGeoY, axisMatY));
+    scene.add(new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 3, 0), 0.8, 0x4fc3f7, 0.3, 0.2
+    ));
+
+    // Z轴 - 磁场B方向（橙色）
+    const axisMatZ = new THREE.LineBasicMaterial({ color: 0xff7043 });
+    const axisGeoZ = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, -3),
+      new THREE.Vector3(0, 0, 3)
+    ]);
+    scene.add(new THREE.Line(axisGeoZ, axisMatZ));
+    scene.add(new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 3), 0.8, 0xff7043, 0.3, 0.2
+    ));
+
+    // 坐标轴标签（使用Sprite文字）
+    function makeLabel(text, color, position) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.font = 'bold 48px Microsoft YaHei, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 32, 32);
+      const texture = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.copy(position);
+      sprite.scale.set(0.8, 0.8, 1);
+      scene.add(sprite);
+    }
+    makeLabel('k', '#66bb6a', new THREE.Vector3(axisLen + 1.2, 0, 0));   // 传播方向
+    makeLabel('E', '#4fc3f7', new THREE.Vector3(0, 3.8, 0));              // 电场方向
+    makeLabel('B', '#ff7043', new THREE.Vector3(0, 0, 3.8));              // 磁场方向
 
     // === 波形参数 ===
     const segCount = 300;
