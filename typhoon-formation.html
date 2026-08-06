@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台风形成过程仿真 - 螺旋雨带与眼壁对流</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; }
+    #sim-canvas { width: 100%; height: 100%; display: block; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px); min-width: 260px; max-width: 340px;
+      padding: 20px; background: rgba(0,0,0,0.85); overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease; z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none; position: absolute; top: 12px; right: 12px; z-index: 20;
+      width: 40px; height: 40px; border-radius: 8px;
+      background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.2);
+      color: #4fc3f7; font-size: 20px; cursor: pointer;
+      align-items: center; justify-content: center; transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar { position: absolute; right: 0; top: 0; height: 100vh; width: clamp(280px,70vw,360px); box-shadow: -4px 0 20px rgba(0,0,0,0.5); }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) { #sidebar { width: 85vw; } }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #4fc3f7; }
+    .slider-group { margin-bottom: 16px; }
+    .slider-group label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .slider-group .val { color: #4fc3f7; font-family: monospace; }
+    .slider-group input[type="range"] { width: 100%; accent-color: #4fc3f7; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { padding: 8px 16px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; }
+    .btn:hover { background: rgba(79,195,247,0.15); }
+    .btn.active { background: rgba(79,195,247,0.25); }
+    .knowledge-card { margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .knowledge-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+    .knowledge-card p { font-size: 13px; line-height: 1.7; color: #ccc; }
+    .phenomena-list { padding-left: 16px; margin-top: 8px; }
+    .phenomena-list li { margin-bottom: 4px; font-size: 12px; color: #bbb; }
+    /* HUD覆盖层 */
+    #hud { position: absolute; bottom: 16px; left: 16px; z-index: 5; padding: 10px 16px; background: rgba(0,0,0,0.6); border-radius: 8px; font-size: 12px; }
+    #hud .row { margin-bottom: 4px; color: #aaa; }
+    #hud .val { color: #4fc3f7; font-family: monospace; }
+    /* 视角标签 */
+    #view-label { position: absolute; top: 12px; left: 12px; z-index: 5; padding: 6px 14px; background: rgba(0,0,0,0.6); border-radius: 6px; font-size: 13px; color: #4fc3f7; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-area">
+      <canvas id="sim-canvas"></canvas>
+      <div id="view-label">俯视云图</div>
+      <div id="hud">
+        <div class="row">风速: <span class="val" id="hud-wind">0</span> m/s</div>
+        <div class="row">中心气压: <span class="val" id="hud-pressure">1013</span> hPa</div>
+        <div class="row">台风等级: <span class="val" id="hud-cat">热带低压</span></div>
+        <div class="row">粒子数: <span class="val" id="hud-particles">0</span></div>
+      </div>
+    </div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
+    <div id="sidebar">
+      <div class="section-title">气象 · 热带气旋 · 台风形成</div>
+      <div class="slider-group">
+        <label>最大风速 <span class="val" id="lbl-wind">50</span> m/s</label>
+        <input type="range" id="sl-wind" min="10" max="80" value="50" step="1">
+      </div>
+      <div class="slider-group">
+        <label>科氏参数 f <span class="val" id="lbl-coriolis">5</span> ×10⁻⁵</label>
+        <input type="range" id="sl-coriolis" min="1" max="10" value="5" step="0.5">
+      </div>
+      <div class="slider-group">
+        <label>螺旋臂数 <span class="val" id="lbl-arms">3</span></label>
+        <input type="range" id="sl-arms" min="1" max="6" value="3" step="1">
+      </div>
+      <div class="slider-group">
+        <label>海温 <span class="val" id="lbl-sst">29</span> °C</label>
+        <input type="range" id="sl-sst" min="26" max="32" value="29" step="0.5">
+      </div>
+      <div class="slider-group">
+        <label>发展阶段</label>
+        <select id="sl-stage" style="width:100%;padding:6px;background:#1a1a2e;color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+          <option value="forming">热带扰动</option>
+          <option value="depression">热带低压</option>
+          <option value="storm" selected>热带风暴</option>
+          <option value="typhoon">台风</option>
+          <option value="super">超强台风</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn active" id="btn-top">俯视</button>
+        <button class="btn" id="btn-cross">剖面</button>
+        <button class="btn" id="btn-pause">暂停</button>
+        <button class="btn" id="btn-reset">重置</button>
+      </div>
+      <div class="knowledge-card">
+        <h4>核心公式</h4>
+        <div id="formula-display"></div>
+      </div>
+      <div class="knowledge-card">
+        <h4>观察要点</h4>
+        <ul class="phenomena-list">
+          <li>螺旋雨带的旋臂结构和对流云团排列</li>
+          <li>眼壁（Eyewall）的强对流环与台风眼的晴空区对比</li>
+          <li>剖面上眼壁的上升气流与高空的辐散出流</li>
+          <li>风速增大时螺旋臂收紧、台风眼缩小的过程</li>
+          <li>科氏力如何驱动气旋性旋转（北半球逆时针）</li>
+        </ul>
+      </div>
+      <div class="knowledge-card">
+        <h4>常见误解</h4>
+        <ul class="phenomena-list">
+          <li>台风眼内晴朗无风，不是风暴最强的区域</li>
+          <li>台风不是"被风吹过来"，而是整系统移动+内部旋转</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <script>
+    // ===== 数值安全守卫 =====
+    function safeVal(v) { return isFinite(v) ? v : 0; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // ===== Canvas设置 =====
+    const canvas = document.getElementById('sim-canvas');
+    const ctx = canvas.getContext('2d');
+    const area = document.getElementById('canvas-area');
+
+    function resizeCanvas() {
+      canvas.width = area.clientWidth * (window.devicePixelRatio || 1);
+      canvas.height = area.clientHeight * (window.devicePixelRatio || 1);
+      canvas.style.width = area.clientWidth + 'px';
+      canvas.style.height = area.clientHeight + 'px';
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // ===== 参数 =====
+    let maxWindSpeed = 50;
+    let coriolisParam = 5e-5;
+    let spiralArms = 3;
+    let sst = 29;
+    let stage = 'storm';
+    let viewMode = 'top'; // 'top' | 'cross'
+    let paused = false;
+
+    // ===== 台风阶段映射 =====
+    const STAGE_CONFIG = {
+      forming:    { eyeRadius: 0,    wallRadius: 0,   outerRadius: 0.3, intensity: 0.15, windMax: 15,  label: '热带扰动' },
+      depression: { eyeRadius: 0,    wallRadius: 0.08, outerRadius: 0.5, intensity: 0.35, windMax: 17,  label: '热带低压' },
+      storm:      { eyeRadius: 0.04, wallRadius: 0.12, outerRadius: 0.7, intensity: 0.6,  windMax: 32,  label: '热带风暴' },
+      typhoon:    { eyeRadius: 0.05, wallRadius: 0.15, outerRadius: 0.85,intensity: 0.8,  windMax: 50,  label: '台风' },
+      super:      { eyeRadius: 0.06, wallRadius: 0.18, outerRadius: 1.0, intensity: 1.0,  windMax: 65,  label: '超强台风' }
+    };
+
+    function getStageConfig() {
+      const cfg = STAGE_CONFIG[stage] || STAGE_CONFIG.storm;
+      // 根据滑块叠加风速调节
+      const windRatio = maxWindSpeed / 80;
+      return {
+        ...cfg,
+        intensity: clamp(cfg.intensity * windRatio * (sst / 29), 0.05, 1.2),
+        windMax: maxWindSpeed
+      };
+    }
+
+    // ===== 粒子池 =====
+    // 每个粒子: x, y, vx, vy, life, age, intensity, type
+    // type: 0=rainband(雨带), 1=eyewall(眼壁), 2=outflow(高空出流), 3=eye(台风眼区)
+    const POOL = 18000;
+    const STRIDE = 8;
+    const px = new Float32Array(POOL * STRIDE);
+    let pCount = 0;
+    let globalTime = 0;
+
+    function spawnParticle(x, y, vx, vy, life, type, intensity) {
+      const i = (pCount++) % POOL * STRIDE;
+      px[i] = x; px[i+1] = y; px[i+2] = vx; px[i+3] = vy;
+      px[i+4] = life; px[i+5] = 0; px[i+6] = clamp(intensity, 0, 1); px[i+7] = type;
+    }
+
+    // ===== 台风物理模型 =====
+    function typhoonVelocityField(r, theta, cfg) {
+      // r: 归一化半径 [0, ~1.2], theta: 角度
+      // 返回切向速度(正=逆时针)和径向速度(正=向外)
+      const eyeR = cfg.eyeRadius;
+      const wallR = cfg.wallRadius;
+      const outerR = cfg.outerRadius;
+      const Vmax = cfg.intensity * 60; // 最大切向速度
+
+      let vTheta = 0;
+      let vR = 0;
+
+      if (r < eyeR) {
+        // 台风眼：弱旋转，下沉
+        vTheta = Vmax * (r / Math.max(eyeR, 0.001)) * 0.3;
+        vR = -2; // 弱下沉气流（负=向内）
+      } else if (r < wallR) {
+        // 眼壁：最强切向风速，强上升
+        const frac = (r - eyeR) / Math.max(wallR - eyeR, 0.001);
+        vTheta = Vmax * (0.3 + 0.7 * Math.sin(frac * Math.PI / 2));
+        vR = -5 * (1 - frac); // 强辐合（向内）
+      } else if (r < outerR) {
+        // 外围雨带区：逐渐衰减
+        const frac = (r - wallR) / Math.max(outerR - wallR, 0.001);
+        vTheta = Vmax * (1 - frac * 0.7);
+        vR = -2 * (1 - frac);
+      } else {
+        // 最外围：缓慢衰减出流
+        const frac = clamp((r - outerR) / 0.3, 0, 1);
+        vTheta = Vmax * 0.3 * (1 - frac);
+        vR = 3 * frac; // 高空出流
+      }
+
+      // 加入科氏力修正（北半球逆时针）
+      const f = coriolisParam * 1e4;
+      vTheta *= (1 + f);
+
+      return { vTheta, vR };
+    }
+
+    // ===== 粒子生成 =====
+    function emitParticles(dt, cfg) {
+      const cx = 0.5, cy = 0.5; // 台风中心
+      const rate = Math.floor(200 * cfg.intensity * dt * 60);
+      const eyeR = cfg.eyeRadius;
+      const wallR = cfg.wallRadius;
+      const outerR = cfg.outerRadius;
+
+      for (let k = 0; k < rate; k++) {
+        const type = Math.random();
+        let x, y, vx, vy, life, pType, intensity;
+
+        if (type < 0.55) {
+          // 螺旋雨带粒子
+          pType = 0;
+          const armIdx = Math.floor(Math.random() * spiralArms);
+          const armOffset = (armIdx / spiralArms) * Math.PI * 2;
+          const r = wallR + Math.random() * (outerR - wallR + 0.2);
+          // 对数螺旋: theta = armOffset + a * ln(r/r0)
+          const spiralK = 0.4;
+          const theta = armOffset + spiralK * Math.log(Math.max(r / Math.max(wallR, 0.01), 0.001)) + globalTime * 0.3;
+
+          x = cx + r * Math.cos(theta);
+          y = cy + r * Math.sin(theta);
+          const vel = typhoonVelocityField(r, theta, cfg);
+          const speed = vel.vTheta;
+          vx = -speed * Math.sin(theta) + vel.vR * Math.cos(theta);
+          vy = speed * Math.cos(theta) + vel.vR * Math.sin(theta);
+          life = 2 + Math.random() * 3;
+          intensity = 0.3 + Math.random() * 0.5 * cfg.intensity;
+        } else if (type < 0.85) {
+          // 眼壁粒子
+          pType = 1;
+          const r = eyeR + Math.random() * (wallR - eyeR + 0.02);
+          const theta = Math.random() * Math.PI * 2 + globalTime * 0.5;
+          x = cx + r * Math.cos(theta);
+          y = cy + r * Math.sin(theta);
+          const vel = typhoonVelocityField(r, theta, cfg);
+          vx = -vel.vTheta * Math.sin(theta) + vel.vR * Math.cos(theta);
+          vy = vel.vTheta * Math.cos(theta) + vel.vR * Math.sin(theta);
+          life = 1.5 + Math.random() * 2;
+          intensity = 0.6 + Math.random() * 0.4 * cfg.intensity;
+        } else if (type < 0.95) {
+          // 高空出流粒子
+          pType = 2;
+          const r = wallR * 0.8 + Math.random() * 0.3;
+          const theta = Math.random() * Math.PI * 2 + globalTime * 0.2;
+          x = cx + r * Math.cos(theta);
+          y = cy + r * Math.sin(theta);
+          vx = 15 * Math.cos(theta);
+          vy = 15 * Math.sin(theta);
+          life = 1.5 + Math.random() * 2;
+          intensity = 0.2 + Math.random() * 0.2;
+        } else {
+          // 台风眼区微弱粒子
+          pType = 3;
+          const r = Math.random() * eyeR;
+          const theta = Math.random() * Math.PI * 2;
+          x = cx + r * Math.cos(theta);
+          y = cy + r * Math.sin(theta);
+          vx = (Math.random() - 0.5) * 2;
+          vy = (Math.random() - 0.5) * 2;
+          life = 1 + Math.random() * 2;
+          intensity = 0.1 + Math.random() * 0.15;
+        }
+
+        spawnParticle(x, y, vx, vy, life, pType, intensity);
+      }
+    }
+
+    // ===== 粒子更新 =====
+    function updateParticles(dt) {
+      const cx = 0.5, cy = 0.5;
+      const cfg = getStageConfig();
+
+      for (let i = 0; i < POOL; i++) {
+        const o = i * STRIDE;
+        if (px[o+4] <= 0) continue;
+
+        // 更新位置
+        px[o] += px[o+2] * dt * 0.01;
+        px[o+1] += px[o+3] * dt * 0.01;
+        px[o+5] += dt;
+
+        // 计算到中心距离和角度
+        const dx = px[o] - cx;
+        const dy = px[o+1] - cy;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        const theta = Math.atan2(dy, dx);
+
+        // 应用力场
+        const vel = typhoonVelocityField(r, theta, cfg);
+        const targetVx = -vel.vTheta * Math.sin(theta) + vel.vR * Math.cos(theta);
+        const targetVy = vel.vTheta * Math.cos(theta) + vel.vR * Math.sin(theta);
+
+        // 加入螺旋扰动
+        const spiralPerturb = 0.3 * Math.sin(3 * theta - globalTime * 2 + r * 10);
+
+        // 速度趋向目标（阻尼+吸引）
+        const damping = 0.92;
+        px[o+2] = safeVal(px[o+2] * damping + targetVx * (1 - damping) + spiralPerturb * Math.cos(theta));
+        px[o+3] = safeVal(px[o+3] * damping + targetVy * (1 - damping) + spiralPerturb * Math.sin(theta));
+
+        // 生命衰减
+        const ageRatio = px[o+5] / px[o+4];
+        px[o+6] = clamp(1 - ageRatio, 0, 1) * px[o+6];
+
+        // 超出生命或飞太远则标记死亡
+        if (px[o+5] >= px[o+4] || r > 0.8) {
+          px[o+4] = 0;
+        }
+      }
+    }
+
+    // ===== 渲染 - 俯视图 =====
+    function renderTopView() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.width, h = canvas.height;
+      const cx = w / 2, cy = h / 2;
+      const scale = Math.min(w, h) * 0.9;
+      const cfg = getStageConfig();
+
+      // 深色海洋背景
+      ctx.fillStyle = '#060818';
+      ctx.fillRect(0, 0, w, h);
+
+      // 海洋背景渐变
+      const seaGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.55);
+      seaGrad.addColorStop(0, 'rgba(10,30,80,0.6)');
+      seaGrad.addColorStop(0.5, 'rgba(8,20,60,0.4)');
+      seaGrad.addColorStop(1, 'rgba(5,10,40,0.2)');
+      ctx.fillStyle = seaGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 绘制云层背景（半透明螺旋形）
+      const arms = spiralArms;
+      ctx.globalAlpha = 0.12 * cfg.intensity;
+      for (let a = 0; a < arms; a++) {
+        const baseAngle = (a / arms) * Math.PI * 2 + globalTime * 0.15;
+        ctx.beginPath();
+        for (let t = 0; t < 200; t++) {
+          const rr = cfg.wallRadius + t * 0.004;
+          const angle = baseAngle + 0.35 * Math.log(Math.max(rr / Math.max(cfg.wallRadius, 0.01), 0.001));
+          const sx = cx + rr * scale * Math.cos(angle);
+          const sy = cy + rr * scale * Math.sin(angle);
+          if (t === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.strokeStyle = '#aaccff';
+        ctx.lineWidth = scale * 0.08;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // 眼壁环
+      if (cfg.eyeRadius > 0) {
+        const wallGrad = ctx.createRadialGradient(cx, cy, cfg.eyeRadius * scale * 0.8, cx, cy, cfg.wallRadius * scale * 1.2);
+        wallGrad.addColorStop(0, 'rgba(255,255,255,0)');
+        wallGrad.addColorStop(0.4, 'rgba(200,220,255,0.15)');
+        wallGrad.addColorStop(0.7, 'rgba(150,180,255,0.1)');
+        wallGrad.addColorStop(1, 'rgba(100,140,255,0)');
+        ctx.fillStyle = wallGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cfg.wallRadius * scale * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 绘制粒子
+      for (let i = 0; i < POOL; i++) {
+        const o = i * STRIDE;
+        if (px[o+4] <= 0) continue;
+
+        const normX = px[o];
+        const normY = px[o+1];
+        const sx = cx + (normX - 0.5) * scale;
+        const sy = cy + (normY - 0.5) * scale;
+        const alpha = px[o+6];
+        const pType = px[o+7];
+
+        if (sx < -10 || sx > w + 10 || sy < -10 || sy > h + 10) continue;
+
+        let color, radius;
+        switch (pType) {
+          case 0: // 雨带
+            color = `rgba(180,210,255,${alpha * 0.7})`;
+            radius = Math.max(1.5, 2.5 * alpha);
+            break;
+          case 1: // 眼壁
+            color = `rgba(255,240,200,${alpha * 0.9})`;
+            radius = Math.max(2, 3.5 * alpha);
+            break;
+          case 2: // 出流
+            color = `rgba(150,200,255,${alpha * 0.3})`;
+            radius = Math.max(1, 2 * alpha);
+            break;
+          case 3: // 眼区
+            color = `rgba(80,120,180,${alpha * 0.4})`;
+            radius = Math.max(1, 1.5 * alpha);
+            break;
+          default:
+            color = `rgba(150,180,255,${alpha * 0.5})`;
+            radius = 2;
+        }
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 眼壁粒子发光
+        if (pType === 1 && alpha > 0.5) {
+          ctx.shadowColor = 'rgba(255,200,100,0.3)';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(sx, sy, radius * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // 台风眼标注
+      if (cfg.eyeRadius > 0) {
+        const eyeScreenR = cfg.eyeRadius * scale;
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, eyeScreenR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = `${12 * (window.devicePixelRatio || 1)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('台风眼', cx, cy - eyeScreenR - 6);
+      }
+    }
+
+    // ===== 渲染 - 剖面图 =====
+    function renderCrossSection() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.width, h = canvas.height;
+      const cfg = getStageConfig();
+
+      ctx.fillStyle = '#060818';
+      ctx.fillRect(0, 0, w, h);
+
+      // 剖面：水平=半径方向，垂直=高度
+      const margin = 60 * dpr;
+      const plotW = w - margin * 2;
+      const plotH = h - margin * 2;
+      const baseY = margin + plotH * 0.7; // 地面线
+      const maxAlt = 16; // km
+
+      // 绘制对流层背景
+      const bgGrad = ctx.createLinearGradient(0, baseY - plotH * 0.65, 0, baseY);
+      bgGrad.addColorStop(0, '#0a0a2a');
+      bgGrad.addColorStop(0.6, '#0d1540');
+      bgGrad.addColorStop(1, '#102050');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(margin, baseY - plotH * 0.65, plotW, plotH * 0.65);
+
+      // 地面（海面）
+      ctx.fillStyle = '#0a2848';
+      ctx.fillRect(margin, baseY, plotW, plotH * 0.3);
+
+      // 地面线
+      ctx.strokeStyle = 'rgba(79,195,247,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(margin, baseY);
+      ctx.lineTo(margin + plotW, baseY);
+      ctx.stroke();
+
+      // 对流层顶
+      const tropoY = baseY - plotH * 0.6;
+      ctx.strokeStyle = 'rgba(79,195,247,0.2)';
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(margin, tropoY);
+      ctx.lineTo(margin + plotW, tropoY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 标签
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = `${11 * dpr}px sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('对流层顶 (~16km)', margin + 4, tropoY - 4);
+      ctx.fillText('海面', margin + 4, baseY + 16);
+
+      // 坐标轴标注
+      ctx.textAlign = 'center';
+      ctx.fillText('台风眼', margin + plotW * 0.2, baseY + 16 * dpr + 4);
+      ctx.fillText('眼壁', margin + plotW * 0.38, baseY + 16 * dpr + 4);
+      ctx.fillText('外雨带', margin + plotW * 0.65, baseY + 16 * dpr + 4);
+
+      // 绘制眼壁对流环
+      const wallX = margin + plotW * 0.35;
+      const wallW = plotW * 0.08;
+      const eyeW = plotW * 0.25;
+
+      // 台风眼区域（晴空下沉）
+      const eyeGrad = ctx.createLinearGradient(margin, baseY, margin, tropoY);
+      eyeGrad.addColorStop(0, 'rgba(20,40,80,0.3)');
+      eyeGrad.addColorStop(1, 'rgba(10,20,50,0.1)');
+      ctx.fillStyle = eyeGrad;
+      ctx.fillRect(margin + plotW * 0.08, tropoY, eyeW, baseY - tropoY);
+
+      // 下沉气流箭头（眼区）
+      ctx.strokeStyle = 'rgba(100,150,255,0.3)';
+      ctx.lineWidth = 2;
+      for (let ax = 0; ax < 3; ax++) {
+        const arrowX = margin + plotW * (0.13 + ax * 0.06);
+        ctx.beginPath();
+        ctx.moveTo(arrowX, tropoY + 20);
+        ctx.lineTo(arrowX, baseY - 20);
+        ctx.stroke();
+        // 箭头头部
+        ctx.beginPath();
+        ctx.moveTo(arrowX, baseY - 20);
+        ctx.lineTo(arrowX - 4, baseY - 30);
+        ctx.lineTo(arrowX + 4, baseY - 30);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(100,150,255,0.3)';
+        ctx.fill();
+      }
+
+      // 眼壁上升气流（强对流）
+      ctx.strokeStyle = 'rgba(255,200,100,0.5)';
+      ctx.lineWidth = 3;
+      for (let side = 0; side < 2; side++) {
+        const startX = side === 0 ? margin + plotW * 0.3 : margin + plotW * 0.42;
+        const endX = side === 0 ? margin + plotW * 0.22 : margin + plotW * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(startX, baseY - 10);
+        // 上升曲线
+        ctx.quadraticCurveTo(startX, tropoY + plotH * 0.2, (startX + endX) / 2, tropoY + 10);
+        ctx.stroke();
+        // 箭头
+        ctx.beginPath();
+        ctx.moveTo((startX + endX) / 2, tropoY + 10);
+        ctx.lineTo((startX + endX) / 2 - 6, tropoY + 20);
+        ctx.lineTo((startX + endX) / 2 + 6, tropoY + 20);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255,200,100,0.5)';
+        ctx.fill();
+      }
+
+      // 眼壁云柱
+      const wallAlpha = cfg.intensity * 0.4;
+      for (let side = 0; side < 2; side++) {
+        const wx = side === 0 ? margin + plotW * 0.3 : margin + plotW * 0.4;
+        const cloudGrad = ctx.createLinearGradient(wx, baseY, wx, tropoY + 30);
+        cloudGrad.addColorStop(0, `rgba(200,220,255,${wallAlpha})`);
+        cloudGrad.addColorStop(0.5, `rgba(150,180,255,${wallAlpha * 0.7})`);
+        cloudGrad.addColorStop(1, `rgba(80,120,200,${wallAlpha * 0.3})`);
+        ctx.fillStyle = cloudGrad;
+        ctx.fillRect(wx, tropoY + 30, wallW, baseY - tropoY - 30);
+      }
+
+      // 高空辐散出流
+      ctx.strokeStyle = 'rgba(150,200,255,0.35)';
+      ctx.lineWidth = 2;
+      // 左出流
+      ctx.beginPath();
+      ctx.moveTo(margin + plotW * 0.25, tropoY + 15);
+      ctx.quadraticCurveTo(margin + plotW * 0.15, tropoY - 5, margin + plotW * 0.02, tropoY + 5);
+      ctx.stroke();
+      // 右出流
+      ctx.beginPath();
+      ctx.moveTo(margin + plotW * 0.55, tropoY + 15);
+      ctx.quadraticCurveTo(margin + plotW * 0.7, tropoY - 5, margin + plotW * 0.95, tropoY + 5);
+      ctx.stroke();
+
+      // 外围雨带（较弱对流）
+      const bandX = margin + plotW * 0.6;
+      ctx.strokeStyle = 'rgba(150,180,255,0.2)';
+      ctx.lineWidth = 2;
+      for (let bi = 0; bi < 3; bi++) {
+        const bx = bandX + bi * plotW * 0.1;
+        ctx.beginPath();
+        ctx.moveTo(bx, baseY - 5);
+        ctx.lineTo(bx + (Math.random() - 0.5) * 10, tropoY + plotH * 0.35);
+        ctx.stroke();
+      }
+
+      // 添加动态粒子（模拟降水/上升气流粒子）
+      for (let i = 0; i < POOL; i++) {
+        const o = i * STRIDE;
+        if (px[o+4] <= 0) continue;
+        const alpha = px[o+6];
+        const pType = px[o+7];
+        if (pType === 2) continue; // 出流粒子不在剖面中显示
+
+        // 将俯视坐标映射到剖面
+        const dx = px[o] - 0.5;
+        const r = Math.abs(dx);
+        const screenX = margin + r * 2 * plotW;
+        const baseHeight = pType === 1 ? (0.3 + Math.random() * 0.5) : (0.1 + Math.random() * 0.2);
+        const screenY = baseY - baseHeight * (baseY - tropoY);
+
+        if (screenX < margin || screenX > margin + plotW) continue;
+
+        let color;
+        switch (pType) {
+          case 0: color = `rgba(150,200,255,${alpha * 0.5})`; break;
+          case 1: color = `rgba(255,220,150,${alpha * 0.7})`; break;
+          case 3: color = `rgba(80,120,180,${alpha * 0.3})`; break;
+          default: color = `rgba(150,180,255,${alpha * 0.3})`;
+        }
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 标注
+      ctx.fillStyle = 'rgba(255,220,100,0.8)';
+      ctx.font = `bold ${12 * dpr}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('眼壁上升气流', margin + plotW * 0.36, tropoY + plotH * 0.15);
+      ctx.fillStyle = 'rgba(100,150,255,0.6)';
+      ctx.fillText('眼区下沉气流', margin + plotW * 0.18, baseY - plotH * 0.35);
+      ctx.fillStyle = 'rgba(150,200,255,0.6)';
+      ctx.fillText('高空辐散出流', margin + plotW * 0.78, tropoY + 8);
+    }
+
+    // ===== HUD更新 =====
+    function updateHUD(cfg) {
+      const pressure = Math.round(1013 - cfg.intensity * 80);
+      const stageInfo = STAGE_CONFIG[stage] || STAGE_CONFIG.storm;
+      document.getElementById('hud-wind').textContent = Math.round(cfg.intensity * 50);
+      document.getElementById('hud-pressure').textContent = pressure;
+      document.getElementById('hud-cat').textContent = stageInfo.label;
+
+      let activeCount = 0;
+      for (let i = 0; i < POOL; i++) {
+        if (px[i * STRIDE + 4] > 0) activeCount++;
+      }
+      document.getElementById('hud-particles').textContent = activeCount;
+    }
+
+    // ===== 动画循环 =====
+    let lastTime = 0;
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      let dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      dt = clamp(dt, 0, 0.05);
+
+      if (!paused) {
+        const cfg = getStageConfig();
+        globalTime += dt;
+        emitParticles(dt, cfg);
+        updateParticles(dt);
+        updateHUD(cfg);
+      }
+
+      // 清除并渲染
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (viewMode === 'top') {
+        renderTopView();
+      } else {
+        renderCrossSection();
+      }
+    }
+
+    // ===== 控件绑定 =====
+    document.getElementById('sl-wind').addEventListener('input', function() {
+      maxWindSpeed = parseInt(this.value);
+      document.getElementById('lbl-wind').textContent = maxWindSpeed;
+    });
+    document.getElementById('sl-coriolis').addEventListener('input', function() {
+      coriolisParam = parseFloat(this.value) * 1e-5;
+      document.getElementById('lbl-coriolis').textContent = parseFloat(this.value).toFixed(1);
+    });
+    document.getElementById('sl-arms').addEventListener('input', function() {
+      spiralArms = parseInt(this.value);
+      document.getElementById('lbl-arms').textContent = spiralArms;
+    });
+    document.getElementById('sl-sst').addEventListener('input', function() {
+      sst = parseFloat(this.value);
+      document.getElementById('lbl-sst').textContent = sst.toFixed(1);
+    });
+    document.getElementById('sl-stage').addEventListener('change', function() {
+      stage = this.value;
+      // 重置粒子
+      px.fill(0);
+      pCount = 0;
+    });
+
+    // 视角切换
+    document.getElementById('btn-top').addEventListener('click', function() {
+      viewMode = 'top';
+      this.classList.add('active');
+      document.getElementById('btn-cross').classList.remove('active');
+      document.getElementById('view-label').textContent = '俯视云图';
+    });
+    document.getElementById('btn-cross').addEventListener('click', function() {
+      viewMode = 'cross';
+      this.classList.add('active');
+      document.getElementById('btn-top').classList.remove('active');
+      document.getElementById('view-label').textContent = '垂直剖面';
+    });
+
+    document.getElementById('btn-pause').addEventListener('click', function() {
+      paused = !paused;
+      this.textContent = paused ? '继续' : '暂停';
+      this.classList.toggle('active', paused);
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', function() {
+      px.fill(0);
+      pCount = 0;
+      globalTime = 0;
+      paused = false;
+      document.getElementById('btn-pause').textContent = '暂停';
+      document.getElementById('btn-pause').classList.remove('active');
+    });
+
+    // 侧边栏折叠
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+    sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+    if (window.innerWidth < 600) sidebar.classList.add('collapsed');
+
+    // ===== KaTeX公式 =====
+    setTimeout(() => {
+      const el = document.getElementById('formula-display');
+      if (el && typeof katex !== 'undefined') {
+        el.innerHTML = `
+          <div style="margin-bottom:8px" id="f1"></div>
+          <div style="margin-bottom:8px" id="f2"></div>
+          <div style="margin-bottom:8px;font-size:12px;color:#aaa;">梯度风平衡</div>
+          <div style="margin-bottom:6px" id="f3"></div>
+        `;
+        try {
+          katex.render('\\frac{v^2}{r} + fv = -\\frac{1}{\\rho}\\frac{\\partial p}{\\partial r}', document.getElementById('f1'), { throwOnError: false, displayMode: true });
+          katex.render('V_{max} \\approx \\sqrt{\\frac{\\Delta p \\cdot f \\cdot r}{\\rho}}', document.getElementById('f2'), { throwOnError: false, displayMode: true });
+          katex.render('\\frac{v^2}{r} = fv + \\frac{1}{\\rho}\\frac{\\Delta p}{\\Delta r}', document.getElementById('f3'), { throwOnError: false, displayMode: true });
+        } catch(e) {}
+      }
+    }, 500);
+
+    // ===== 启动 =====
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
