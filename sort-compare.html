@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排序算法对比仿真 - 快速排序 vs 冒泡排序</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px);
+      min-width: 260px;
+      max-width: 340px;
+      padding: 20px;
+      background: rgba(0,0,0,0.85);
+      overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none;
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #4fc3f7;
+      font-size: 20px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100vh;
+        width: clamp(280px, 70vw, 360px);
+        box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+      }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) {
+      #sidebar { width: 85vw; }
+    }
+    /* 对比两栏布局 */
+    .compare-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .panels { flex: 1; display: flex; gap: 4px; padding: 8px; min-height: 0; }
+    .panel { flex: 1; display: flex; flex-direction: column; min-width: 0; background: rgba(255,255,255,0.03); border-radius: 8px; overflow: hidden; }
+    .panel-header { padding: 10px 16px; font-size: 15px; font-weight: 600; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .panel-header.quicksort { color: #4fc3f7; }
+    .panel-header.bubblesort { color: #ff9800; }
+    .panel-canvas-wrap { flex: 1; position: relative; min-height: 0; }
+    .panel-canvas-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .panel-stats { display: flex; justify-content: space-around; padding: 8px 12px; font-size: 12px; color: #aaa; border-top: 1px solid rgba(255,255,255,0.05); }
+    .panel-stats .val { color: #fff; font-family: monospace; font-weight: 600; }
+    /* 顶部控制条 */
+    .top-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
+    .top-bar .title { font-size: 16px; font-weight: 700; color: #e0e0e0; }
+    .top-bar .spacer { flex: 1; }
+    .top-bar .stat { font-size: 13px; color: #aaa; }
+    .top-bar .stat .val { color: #4fc3f7; font-family: monospace; }
+    .top-bar button { padding: 6px 14px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; }
+    .top-bar button:hover { background: rgba(79,195,247,0.15); }
+    .top-bar button.active { background: rgba(79,195,247,0.25); }
+    .top-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* sidebar样式 */
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #4fc3f7; }
+    .slider-group { margin-bottom: 16px; }
+    .slider-group label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .slider-group .val { color: #4fc3f7; font-family: monospace; }
+    .slider-group input[type="range"] { width: 100%; accent-color: #4fc3f7; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { padding: 8px 16px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; }
+    .btn:hover { background: rgba(79,195,247,0.15); }
+    .btn.active { background: rgba(79,195,247,0.25); }
+    .knowledge-card { margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .knowledge-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+    .knowledge-card p, .knowledge-card li { font-size: 13px; line-height: 1.7; color: #ccc; }
+    .knowledge-card ul { padding-left: 16px; margin-top: 4px; }
+    .knowledge-card li { margin-bottom: 4px; }
+    .formula { color: #4fc3f7; font-family: 'Times New Roman', serif; font-style: italic; }
+    .phenomena-list { padding-left: 16px; margin-top: 8px; }
+    .phenomena-list li { margin-bottom: 4px; font-size: 12px; color: #bbb; }
+    /* 完成覆盖层 */
+    .done-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.5s; }
+    .done-overlay.show { opacity: 1; }
+    .done-overlay span { padding: 6px 18px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+    .done-overlay.quicksort span { background: rgba(79,195,247,0.2); color: #4fc3f7; border: 1px solid #4fc3f7; }
+    .done-overlay.bubblesort span { background: rgba(255,152,0,0.2); color: #ff9800; border: 1px solid #ff9800; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-area">
+      <div class="top-bar">
+        <span class="title">排序算法对比仿真</span>
+        <span class="spacer"></span>
+        <span class="stat">数组大小: <span class="val" id="size-display">30</span></span>
+        <span class="stat">速度: <span class="val" id="speed-display">5</span> 步/帧</span>
+        <span class="stat">耗时比: <span class="val" id="ratio-display">-</span></span>
+      </div>
+      <div class="panels">
+        <div class="panel">
+          <div class="panel-header quicksort">快速排序 Quick Sort</div>
+          <div class="panel-canvas-wrap" id="qs-wrap">
+            <canvas id="qs-canvas"></canvas>
+            <div class="done-overlay quicksort" id="qs-done"><span>排序完成</span></div>
+          </div>
+          <div class="panel-stats">
+            <span>比较: <span class="val" id="qs-cmp">0</span></span>
+            <span>交换: <span class="val" id="qs-swp">0</span></span>
+            <span>状态: <span class="val" id="qs-state">就绪</span></span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header bubblesort">冒泡排序 Bubble Sort</div>
+          <div class="panel-canvas-wrap" id="bs-wrap">
+            <canvas id="bs-canvas"></canvas>
+            <div class="done-overlay bubblesort" id="bs-done"><span>排序完成</span></div>
+          </div>
+          <div class="panel-stats">
+            <span>比较: <span class="val" id="bs-cmp">0</span></span>
+            <span>交换: <span class="val" id="bs-swp">0</span></span>
+            <span>状态: <span class="val" id="bs-state">就绪</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
+    <div id="sidebar">
+      <div class="section-title">计算机 · 算法 · 排序对比</div>
+      <div class="slider-group">
+        <label>数组大小 <span class="val" id="lbl-size">30</span></label>
+        <input type="range" id="sl-size" min="8" max="80" value="30">
+      </div>
+      <div class="slider-group">
+        <label>动画速度 <span class="val" id="lbl-speed">5</span> 步/帧</label>
+        <input type="range" id="sl-speed" min="1" max="30" value="5">
+      </div>
+      <div class="slider-group">
+        <label>初始顺序</label>
+        <select id="sl-order" style="width:100%;padding:6px;background:#1a1a2e;color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+          <option value="random">随机</option>
+          <option value="nearly">近乎有序</option>
+          <option value="reversed">逆序</option>
+          <option value="few-unique">少量唯一值</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn" id="btn-start">开始</button>
+        <button class="btn" id="btn-pause" disabled>暂停</button>
+        <button class="btn" id="btn-step">单步</button>
+        <button class="btn" id="btn-reset">重置</button>
+      </div>
+      <div class="knowledge-card">
+        <h4>核心公式</h4>
+        <div id="formula-display"></div>
+      </div>
+      <div class="knowledge-card">
+        <h4>观察要点</h4>
+        <ul class="phenomena-list">
+          <li>快速排序的分区操作如何将数组逐步拆分为小段</li>
+          <li>冒泡排序每轮将最大元素"冒泡"到末端的缓慢过程</li>
+          <li>两种算法的比较次数与交换次数的差异</li>
+          <li>逆序输入下冒泡排序的比较次数达到最大 O(n²)</li>
+          <li>快速排序在近乎有序数据上退化为 O(n²) 的表现</li>
+        </ul>
+      </div>
+      <div class="knowledge-card">
+        <h4>常见误解</h4>
+        <ul class="phenomena-list">
+          <li>快速排序并非总是 O(n log n)，最坏情况退化为 O(n²)</li>
+          <li>冒泡排序并非"一无是处"，对近乎有序数据有自适应优势</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <script>
+    // ===== 数值安全守卫 =====
+    function safeVal(v) { return isFinite(v) ? v : 0; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // ===== 全局状态 =====
+    let arrSize = 30;
+    let stepsPerFrame = 5;
+    let running = false;
+    let paused = false;
+    let stepMode = false;
+    let sourceArray = []; // 共享初始数组
+
+    // ===== 排序状态机 =====
+    // 每种排序维护独立的: arr(当前数组), steps(预生成的操作序列), stepIdx, compares, swaps, highlights
+    function createSortState(arr) {
+      return {
+        arr: arr.slice(),
+        steps: [],
+        stepIdx: 0,
+        compares: 0,
+        swaps: 0,
+        done: false,
+        // 高亮状态: { comparing: [i,j], swapping: [i,j], pivot: i, sorted: Set }
+        comparing: [],
+        swapping: [],
+        pivot: -1,
+        sortedSet: new Set(),
+        partitionRange: [-1, -1]
+      };
+    }
+
+    // ===== 快速排序 - 预生成操作步骤 =====
+    function generateQuickSortSteps(arr) {
+      const steps = [];
+      const a = arr.slice();
+      const sorted = new Set();
+      // 使用Lomuto分区方案
+      function qs(lo, hi) {
+        if (lo >= hi) {
+          if (lo === hi) sorted.add(lo);
+          return;
+        }
+        // 选择最右元素作为pivot
+        const pivotVal = a[hi];
+        steps.push({ type: 'pivot', idx: hi, lo, hi });
+        let i = lo;
+        for (let j = lo; j < hi; j++) {
+          steps.push({ type: 'compare', i, j, lo, hi });
+          if (a[j] <= pivotVal) {
+            if (i !== j) {
+              steps.push({ type: 'swap', i, j, lo, hi });
+              [a[i], a[j]] = [a[j], a[i]];
+            }
+            i++;
+          }
+        }
+        if (i !== hi) {
+          steps.push({ type: 'swap', i, j: hi, lo, hi });
+          [a[i], a[hi]] = [a[hi], a[i]];
+        }
+        sorted.add(i);
+        steps.push({ type: 'sorted', idx: i });
+        qs(lo, i - 1);
+        qs(i + 1, hi);
+      }
+      qs(0, a.length - 1);
+      // 标记全部有序
+      steps.push({ type: 'done' });
+      return steps;
+    }
+
+    // ===== 冒泡排序 - 预生成操作步骤 =====
+    function generateBubbleSortSteps(arr) {
+      const steps = [];
+      const a = arr.slice();
+      const n = a.length;
+      const sorted = new Set();
+      for (let i = 0; i < n - 1; i++) {
+        let swapped = false;
+        for (let j = 0; j < n - 1 - i; j++) {
+          steps.push({ type: 'compare', i: j, j: j + 1, pass: i });
+          if (a[j] > a[j + 1]) {
+            steps.push({ type: 'swap', i: j, j: j + 1, pass: i });
+            [a[j], a[j + 1]] = [a[j + 1], a[j]];
+            swapped = true;
+          }
+        }
+        sorted.add(n - 1 - i);
+        steps.push({ type: 'sorted', idx: n - 1 - i });
+        if (!swapped) {
+          // 已经有序，标记所有剩余为sorted
+          for (let k = 0; k < n - 1 - i; k++) sorted.add(k);
+          steps.push({ type: 'early-exit' });
+          break;
+        }
+      }
+      sorted.add(0);
+      steps.push({ type: 'done' });
+      return steps;
+    }
+
+    // ===== 执行一步排序操作 =====
+    function executeStep(state, steps) {
+      if (state.stepIdx >= steps.length) { state.done = true; return; }
+      const step = steps[state.stepIdx];
+      state.comparing = [];
+      state.swapping = [];
+      state.pivot = -1;
+      state.partitionRange = [-1, -1];
+
+      switch (step.type) {
+        case 'compare':
+          state.compares++;
+          state.comparing = [step.i, step.j];
+          if (step.lo !== undefined) state.partitionRange = [step.lo, step.hi || step.j];
+          break;
+        case 'swap':
+          state.swaps++;
+          state.swapping = [step.i, step.j];
+          [state.arr[step.i], state.arr[step.j]] = [state.arr[step.j], state.arr[step.i]];
+          break;
+        case 'pivot':
+          state.pivot = step.idx;
+          state.partitionRange = [step.lo, step.hi];
+          break;
+        case 'sorted':
+          state.sortedSet.add(step.idx);
+          break;
+        case 'done':
+          state.done = true;
+          for (let i = 0; i < state.arr.length; i++) state.sortedSet.add(i);
+          break;
+      }
+      state.stepIdx++;
+    }
+
+    // ===== 生成初始数组 =====
+    function generateArray(size, order) {
+      let arr = [];
+      switch (order) {
+        case 'random':
+          for (let i = 0; i < size; i++) arr.push(Math.floor(Math.random() * 90) + 10);
+          break;
+        case 'nearly':
+          for (let i = 0; i < size; i++) arr.push(i + 1);
+          // 仅交换少量元素
+          for (let k = 0; k < Math.max(1, Math.floor(size * 0.1)); k++) {
+            const i = Math.floor(Math.random() * size);
+            const j = Math.floor(Math.random() * size);
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          break;
+        case 'reversed':
+          for (let i = size; i >= 1; i--) arr.push(i);
+          break;
+        case 'few-unique':
+          const vals = [15, 45, 75];
+          for (let i = 0; i < size; i++) arr.push(vals[Math.floor(Math.random() * vals.length)]);
+          break;
+        default:
+          for (let i = 0; i < size; i++) arr.push(Math.floor(Math.random() * 90) + 10);
+      }
+      return arr;
+    }
+
+    // ===== 初始化排序状态 =====
+    let qsState, bsState, qsSteps, bsSteps;
+
+    function initSortStates() {
+      sourceArray = generateArray(arrSize, document.getElementById('sl-order').value);
+      qsState = createSortState(sourceArray);
+      bsState = createSortState(sourceArray);
+      qsSteps = generateQuickSortSteps(sourceArray);
+      bsSteps = generateBubbleSortSteps(sourceArray);
+      // 更新UI
+      document.getElementById('qs-cmp').textContent = '0';
+      document.getElementById('qs-swp').textContent = '0';
+      document.getElementById('qs-state').textContent = '就绪';
+      document.getElementById('bs-cmp').textContent = '0';
+      document.getElementById('bs-swp').textContent = '0';
+      document.getElementById('bs-state').textContent = '就绪';
+      document.getElementById('qs-done').classList.remove('show');
+      document.getElementById('bs-done').classList.remove('show');
+      document.getElementById('ratio-display').textContent = '-';
+    }
+
+    // ===== Canvas渲染 =====
+    const qsCanvas = document.getElementById('qs-canvas');
+    const bsCanvas = document.getElementById('bs-canvas');
+    const qsCtx = qsCanvas.getContext('2d');
+    const bsCtx = bsCanvas.getContext('2d');
+
+    function resizeCanvas(canvas) {
+      const wrap = canvas.parentElement;
+      canvas.width = wrap.clientWidth * (window.devicePixelRatio || 1);
+      canvas.height = wrap.clientHeight * (window.devicePixelRatio || 1);
+      canvas.style.width = wrap.clientWidth + 'px';
+      canvas.style.height = wrap.clientHeight + 'px';
+    }
+
+    function resizeAll() {
+      resizeCanvas(qsCanvas);
+      resizeCanvas(bsCanvas);
+    }
+    resizeAll();
+    window.addEventListener('resize', resizeAll);
+
+    // 颜色定义
+    const COLORS = {
+      default: '#546e7a',
+      comparing: '#fdd835',
+      swapping: '#ef5350',
+      pivot: '#ce93d8',
+      sorted: '#66bb6a',
+      partitionBg: 'rgba(206,147,216,0.06)'
+    };
+
+    const BS_COLORS = {
+      default: '#546e7a',
+      comparing: '#fdd835',
+      swapping: '#ef5350',
+      sorted: '#ffa726',
+      passBound: 'rgba(255,167,38,0.06)'
+    };
+
+    function drawBars(ctx, canvas, state, isQuickSort) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const arr = state.arr;
+      const n = arr.length;
+      if (n === 0) return;
+
+      const maxVal = Math.max(...arr, 1);
+      const padding = 8 * dpr;
+      const gap = Math.max(1, Math.min(3 * dpr, (w - 2 * padding) / n * 0.15));
+      const barW = Math.max(2, (w - 2 * padding - gap * (n - 1)) / n);
+      const maxBarH = h - 2 * padding;
+
+      // 绘制分区背景（快速排序）
+      if (isQuickSort && state.partitionRange[0] >= 0) {
+        const lo = state.partitionRange[0];
+        const hi = state.partitionRange[1];
+        const x1 = padding + lo * (barW + gap) - gap / 2;
+        const x2 = padding + hi * (barW + gap) + barW + gap / 2;
+        ctx.fillStyle = COLORS.partitionBg;
+        ctx.fillRect(x1, 0, x2 - x1, h);
+      }
+
+      for (let i = 0; i < n; i++) {
+        const barH = (arr[i] / maxVal) * maxBarH;
+        const x = padding + i * (barW + gap);
+        const y = h - padding - barH;
+
+        // 确定颜色
+        let color = isQuickSort ? COLORS.default : BS_COLORS.default;
+        let glow = false;
+
+        if (state.comparing.includes(i)) {
+          color = isQuickSort ? COLORS.comparing : BS_COLORS.comparing;
+          glow = true;
+        }
+        if (state.swapping.includes(i)) {
+          color = isQuickSort ? COLORS.swapping : BS_COLORS.swapping;
+          glow = true;
+        }
+        if (isQuickSort && state.pivot === i) {
+          color = COLORS.pivot;
+          glow = true;
+        }
+        if (state.sortedSet.has(i)) {
+          color = isQuickSort ? COLORS.sorted : BS_COLORS.sorted;
+        }
+
+        // 绘制柱体
+        ctx.fillStyle = color;
+        // 圆角顶部
+        const r = Math.min(barW / 2, 4 * dpr);
+        ctx.beginPath();
+        ctx.moveTo(x, y + r);
+        ctx.arcTo(x, y, x + barW, y, r);
+        ctx.arcTo(x + barW, y, x + barW, y + barH, r);
+        ctx.lineTo(x + barW, y + barH);
+        ctx.lineTo(x, y + barH);
+        ctx.closePath();
+        ctx.fill();
+
+        // 发光效果
+        if (glow) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 12 * dpr;
+          ctx.fill();
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        }
+
+        // 显示数值（仅在bar够宽时）
+        if (barW > 18 * dpr && n <= 40) {
+          ctx.fillStyle = state.sortedSet.has(i) ? '#000' : '#fff';
+          ctx.font = `bold ${Math.min(11 * dpr, barW * 0.7)}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.fillText(arr[i], x + barW / 2, y + barH / 2 + 4 * dpr);
+        }
+      }
+    }
+
+    // ===== 动画循环 =====
+    let lastTime = 0;
+    let frameAccum = 0;
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      let dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      dt = clamp(dt, 0, 0.05);
+
+      if (running && !paused) {
+        const steps = Math.max(1, stepsPerFrame);
+        for (let s = 0; s < steps; s++) {
+          if (!qsState.done) {
+            executeStep(qsState, qsSteps);
+          }
+          if (!bsState.done) {
+            executeStep(bsState, bsSteps);
+          }
+          if (qsState.done && bsState.done) break;
+        }
+        // 更新统计
+        document.getElementById('qs-cmp').textContent = qsState.compares;
+        document.getElementById('qs-swp').textContent = qsState.swaps;
+        document.getElementById('bs-cmp').textContent = bsState.compares;
+        document.getElementById('bs-swp').textContent = bsState.swaps;
+        document.getElementById('qs-state').textContent = qsState.done ? '完成' : '排序中';
+        document.getElementById('bs-state').textContent = bsState.done ? '完成' : '排序中';
+
+        if (qsState.done) document.getElementById('qs-done').classList.add('show');
+        if (bsState.done) document.getElementById('bs-done').classList.add('show');
+
+        // 计算耗时比
+        if (qsState.done && bsState.done) {
+          const ratio = bsState.compares > 0 ? (qsState.compares / bsState.compares).toFixed(2) : '-';
+          document.getElementById('ratio-display').textContent = ratio + ' (快/冒)';
+        }
+
+        if (qsState.done && bsState.done) {
+          running = false;
+          document.getElementById('btn-start').disabled = false;
+          document.getElementById('btn-pause').disabled = true;
+        }
+
+        if (stepMode) {
+          paused = true;
+          stepMode = false;
+        }
+      }
+
+      // 渲染
+      drawBars(qsCtx, qsCanvas, qsState, true);
+      drawBars(bsCtx, bsCanvas, bsState, false);
+    }
+
+    // ===== 控件绑定 =====
+    document.getElementById('sl-size').addEventListener('input', function () {
+      arrSize = parseInt(this.value);
+      document.getElementById('lbl-size').textContent = arrSize;
+      document.getElementById('size-display').textContent = arrSize;
+      if (!running) initSortStates();
+    });
+
+    document.getElementById('sl-speed').addEventListener('input', function () {
+      stepsPerFrame = parseInt(this.value);
+      document.getElementById('lbl-speed').textContent = stepsPerFrame;
+      document.getElementById('speed-display').textContent = stepsPerFrame;
+    });
+
+    document.getElementById('btn-start').addEventListener('click', function () {
+      if (running && paused) {
+        paused = false;
+        this.disabled = true;
+        document.getElementById('btn-pause').disabled = false;
+        return;
+      }
+      if (!running) {
+        initSortStates();
+        running = true;
+        paused = false;
+        this.disabled = true;
+        document.getElementById('btn-pause').disabled = false;
+      }
+    });
+
+    document.getElementById('btn-pause').addEventListener('click', function () {
+      paused = true;
+      this.disabled = true;
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-start').textContent = '继续';
+    });
+
+    document.getElementById('btn-step').addEventListener('click', function () {
+      if (!running) {
+        initSortStates();
+        running = true;
+      }
+      paused = false;
+      stepMode = true;
+      document.getElementById('btn-pause').disabled = false;
+      document.getElementById('btn-start').disabled = true;
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', function () {
+      running = false;
+      paused = false;
+      stepMode = false;
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-start').textContent = '开始';
+      document.getElementById('btn-pause').disabled = true;
+      initSortStates();
+    });
+
+    document.getElementById('sl-order').addEventListener('change', function () {
+      if (!running) initSortStates();
+    });
+
+    // 侧边栏折叠
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+    sidebarToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('collapsed');
+    });
+    // 小屏默认折叠
+    if (window.innerWidth < 600) {
+      sidebar.classList.add('collapsed');
+    }
+
+    // ===== KaTeX公式 =====
+    function renderFormula(elementId, latex) {
+      const el = document.getElementById(elementId);
+      if (el && typeof katex !== 'undefined') {
+        katex.render(latex, el, { throwOnError: false, displayMode: true });
+      }
+    }
+    // 延迟渲染，确保KaTeX加载
+    setTimeout(() => {
+      const el = document.getElementById('formula-display');
+      if (el) {
+        el.innerHTML = `
+          <div style="margin-bottom:10px" id="f1"></div>
+          <div style="margin-bottom:10px" id="f2"></div>
+          <div style="margin-bottom:6px;font-size:12px;color:#aaa;">快速排序最坏</div>
+          <div style="margin-bottom:10px" id="f3"></div>
+        `;
+        try {
+          renderFormula('f1', 'T_{\\text{quick}} = O(n \\log n)');
+          renderFormula('f2', 'T_{\\text{bubble}} = O(n^2)');
+          renderFormula('f3', 'T_{\\text{quick}} = O(n^2)');
+        } catch(e) {}
+      }
+    }, 500);
+
+    // ===== 启动 =====
+    initSortStates();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
