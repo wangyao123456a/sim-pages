@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CNN前向传播3D可视化 - 卷积特征图计算</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0a0a1a; color: #fff; overflow: hidden; }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+    #canvas-area { flex: 1; min-width: 0; position: relative; }
+    #sidebar {
+      width: clamp(260px, 22vw, 340px);
+      min-width: 260px;
+      max-width: 340px;
+      padding: 20px;
+      background: rgba(0,0,0,0.85);
+      overflow-y: auto;
+      border-left: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 10;
+    }
+    #sidebar-toggle {
+      display: none;
+      position: absolute;
+      top: 12px; right: 12px; z-index: 20;
+      width: 40px; height: 40px; border-radius: 8px;
+      background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.2);
+      color: #4fc3f7; font-size: 20px; cursor: pointer;
+      align-items: center; justify-content: center; transition: background 0.2s;
+    }
+    #sidebar-toggle:hover { background: rgba(79,195,247,0.15); }
+    #sidebar.collapsed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+    @media (max-width: 900px) {
+      #sidebar { position: absolute; right: 0; top: 0; height: 100vh; width: clamp(280px,70vw,360px); box-shadow: -4px 0 20px rgba(0,0,0,0.5); }
+      #sidebar-toggle { display: flex; }
+    }
+    @media (max-width: 600px) { #sidebar { width: 85vw; } }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #4fc3f7; }
+    .slider-group { margin-bottom: 16px; }
+    .slider-group label { display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px; }
+    .slider-group .val { color: #4fc3f7; font-family: monospace; }
+    .slider-group input[type="range"] { width: 100%; accent-color: #4fc3f7; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .btn { padding: 8px 16px; border: 1px solid #4fc3f7; background: transparent; color: #4fc3f7; cursor: pointer; border-radius: 4px; font-size: 13px; }
+    .btn:hover { background: rgba(79,195,247,0.15); }
+    .btn.active { background: rgba(79,195,247,0.25); }
+    .knowledge-card { margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .knowledge-card h4 { font-size: 14px; color: #4fc3f7; margin-bottom: 8px; }
+    .knowledge-card p { font-size: 13px; line-height: 1.7; color: #ccc; }
+    .phenomena-list { padding-left: 16px; margin-top: 8px; }
+    .phenomena-list li { margin-bottom: 4px; font-size: 12px; color: #bbb; }
+    /* 信息覆盖层 */
+    #info-overlay {
+      position: absolute; top: 12px; left: 12px; z-index: 5;
+      padding: 10px 16px; background: rgba(0,0,0,0.7); border-radius: 8px;
+      font-size: 13px; pointer-events: none;
+    }
+    #info-overlay .row { margin-bottom: 4px; color: #aaa; }
+    #info-overlay .val { color: #4fc3f7; font-family: monospace; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-area">
+      <div id="info-overlay">
+        <div class="row">输入尺寸: <span class="val" id="info-input">6×6×1</span></div>
+        <div class="row">卷积核: <span class="val" id="info-kernel">3×3</span></div>
+        <div class="row">步长/填充: <span class="val" id="info-stride-pad">1 / 0</span></div>
+        <div class="row">输出特征图: <span class="val" id="info-output">4×4×1</span></div>
+        <div class="row">当前计算: <span class="val" id="info-current">(-, -)</span></div>
+      </div>
+    </div>
+    <button id="sidebar-toggle" title="切换面板">☰</button>
+    <div id="sidebar">
+      <div class="section-title">计算机 · 深度学习 · CNN卷积</div>
+      <div class="slider-group">
+        <label>输入尺寸 N <span class="val" id="lbl-n">6</span></label>
+        <input type="range" id="sl-n" min="4" max="10" value="6" step="1">
+      </div>
+      <div class="slider-group">
+        <label>卷积核大小 K <span class="val" id="lbl-k">3</span></label>
+        <input type="range" id="sl-k" min="2" max="5" value="3" step="1">
+      </div>
+      <div class="slider-group">
+        <label>步长 Stride <span class="val" id="lbl-stride">1</span></label>
+        <input type="range" id="sl-stride" min="1" max="3" value="1" step="1">
+      </div>
+      <div class="slider-group">
+        <label>填充 Padding <span class="val" id="lbl-pad">0</span></label>
+        <input type="range" id="sl-pad" min="0" max="2" value="0" step="1">
+      </div>
+      <div class="slider-group">
+        <label>动画速度 <span class="val" id="lbl-speed">1.0</span>x</label>
+        <input type="range" id="sl-speed" min="0.2" max="4" value="1" step="0.2">
+      </div>
+      <div class="btn-group">
+        <button class="btn" id="btn-play">播放</button>
+        <button class="btn" id="btn-pause" disabled>暂停</button>
+        <button class="btn" id="btn-step">单步</button>
+        <button class="btn" id="btn-reset">重置</button>
+      </div>
+      <div class="knowledge-card">
+        <h4>核心公式</h4>
+        <div id="formula-display"></div>
+      </div>
+      <div class="knowledge-card">
+        <h4>观察要点</h4>
+        <ul class="phenomena-list">
+          <li>卷积核在输入特征图上逐步滑动的3D过程</li>
+          <li>每次计算时核窗口覆盖区域的加权求和</li>
+          <li>步长增大时输出特征图尺寸如何缩小</li>
+          <li>填充(padding)如何保持输出空间尺寸</li>
+          <li>输出特征图逐元素生成的过程</li>
+        </ul>
+      </div>
+      <div class="knowledge-card">
+        <h4>常见误解</h4>
+        <ul class="phenomena-list">
+          <li>卷积不是矩阵乘法，而是局部加权求和+滑动</li>
+          <li>输出尺寸由 (N-K+2P)/S+1 决定，不是简单的 N/K</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 数值安全守卫 =====
+    function safeVal(v) { return isFinite(v) ? v : 0; }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // ===== 参数 =====
+    let N = 6, K = 3, stride = 1, padding = 0;
+    let animSpeed = 1.0;
+    const outSize = () => Math.floor((N - K + 2 * padding) / stride) + 1;
+
+    // ===== 生成随机输入数据 =====
+    let inputData = [];
+    let kernelData = [];
+    let outputData = [];
+
+    function generateData() {
+      inputData = [];
+      for (let i = 0; i < N * N; i++) inputData.push(Math.random() * 0.8 + 0.1);
+      kernelData = [];
+      // 生成边缘检测核
+      for (let i = 0; i < K * K; i++) {
+        const r = i / (K * K);
+        kernelData.push((Math.random() - 0.5) * 2);
+      }
+      outputData = [];
+      const oN = outSize();
+      for (let oi = 0; oi < oN; oi++) {
+        for (let oj = 0; oj < oN; oj++) {
+          let sum = 0;
+          for (let ki = 0; ki < K; ki++) {
+            for (let kj = 0; kj < K; kj++) {
+              const ri = oi * stride + ki - padding;
+              const rj = oj * stride + kj - padding;
+              if (ri >= 0 && ri < N && rj >= 0 && rj < N) {
+                sum += inputData[ri * N + rj] * kernelData[ki * K + kj];
+              }
+            }
+          }
+          outputData.push(Math.max(0, sum)); // ReLU
+        }
+      }
+    }
+    generateData();
+
+    // ===== Three.js场景 =====
+    const canvasArea = document.getElementById('canvas-area');
+    const w = canvasArea.clientWidth, h = canvasArea.clientHeight;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
+    camera.position.set(6, 8, 12);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x0a0a1a, 1);
+    canvasArea.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+
+    // 灯光
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+
+    // ===== 3D构建辅助函数 =====
+    const CELL_SIZE = 1.0; // 每个格子的3D尺寸
+    const GAP = 0.08;
+    const CELL_HEIGHT_SCALE = 2.5; // 值映射到高度的比例
+
+    // 颜色映射
+    function valueToColor(val, maxVal) {
+      const t = clamp(val / maxVal, 0, 1);
+      const r = t * 0.3;
+      const g = 0.3 + t * 0.5;
+      const b = 0.8 + t * 0.2;
+      return new THREE.Color(r, g, b);
+    }
+
+    function kernelToColor(val) {
+      if (val > 0) return new THREE.Color(0.2, 0.8, 0.2);
+      if (val < 0) return new THREE.Color(0.9, 0.2, 0.2);
+      return new THREE.Color(0.3, 0.3, 0.3);
+    }
+
+    function outputToColor(val, maxVal) {
+      const t = clamp(val / maxVal, 0.05, 1);
+      return new THREE.Color(0.9 * t + 0.1, 0.5 * t + 0.1, 0.1);
+    }
+
+    // 清空场景中的卷积可视化组
+    const convGroup = new THREE.Group();
+    scene.add(convGroup);
+
+    function clearGroup(group) {
+      while (group.children.length > 0) {
+        const child = group.children[0];
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+        group.remove(child);
+      }
+    }
+
+    // ===== 构建输入特征图（3D方块矩阵）=====
+    function buildInputFeatureMap() {
+      const group = new THREE.Group();
+      const offset = -(N * (CELL_SIZE + GAP)) / 2;
+      const maxVal = Math.max(...inputData, 0.01);
+      for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) {
+          const val = inputData[i * N + j];
+          const h = Math.max(0.05, val * CELL_HEIGHT_SCALE);
+          const geo = new THREE.BoxGeometry(CELL_SIZE * 0.9, h, CELL_SIZE * 0.9);
+          const mat = new THREE.MeshPhongMaterial({
+            color: valueToColor(val, maxVal),
+            transparent: true,
+            opacity: 0.85,
+            shininess: 60
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(offset + j * (CELL_SIZE + GAP), h / 2 - 1, offset + i * (CELL_SIZE + GAP));
+          mesh.userData = { row: i, col: j, val };
+          group.add(mesh);
+        }
+      }
+      // 添加底板
+      const baseGeo = new THREE.PlaneGeometry(N * (CELL_SIZE + GAP) + 0.2, N * (CELL_SIZE + GAP) + 0.2);
+      const baseMat = new THREE.MeshPhongMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.4 });
+      const base = new THREE.Mesh(baseGeo, baseMat);
+      base.rotation.x = -Math.PI / 2;
+      base.position.y = -1.01;
+      group.add(base);
+
+      // 标签 - 使用Sprite
+      const labelSprite = makeTextSprite('Input Feature Map', '#4fc3f7');
+      labelSprite.position.set(0, -1.5, -N * (CELL_SIZE + GAP) / 2 - 0.8);
+      group.add(labelSprite);
+
+      return group;
+    }
+
+    // ===== 构建卷积核（3D方块矩阵，浮在输入上方）=====
+    function buildKernel(curRow, curCol) {
+      const group = new THREE.Group();
+      const offset = -(N * (CELL_SIZE + GAP)) / 2;
+      const maxAbsKernel = Math.max(...kernelData.map(Math.abs), 0.01);
+
+      for (let i = 0; i < K; i++) {
+        for (let j = 0; j < K; j++) {
+          const val = kernelData[i * K + j];
+          const h = Math.max(0.05, Math.abs(val) * 1.5);
+          const geo = new THREE.BoxGeometry(CELL_SIZE * 0.85, h, CELL_SIZE * 0.85);
+          const mat = new THREE.MeshPhongMaterial({
+            color: kernelToColor(val),
+            transparent: true,
+            opacity: 0.7,
+            shininess: 80,
+            emissive: kernelToColor(val),
+            emissiveIntensity: 0.3
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          const inputI = curRow * stride + i - padding;
+          const inputJ = curCol * stride + j - padding;
+          mesh.position.set(
+            offset + (curCol * stride + j) * (CELL_SIZE + GAP),
+            2.5 + h / 2,
+            offset + (curRow * stride + i) * (CELL_SIZE + GAP)
+          );
+          group.add(mesh);
+        }
+      }
+
+      // 核标签
+      const labelSprite = makeTextSprite('Kernel', '#66bb6a');
+      labelSprite.position.set(
+        offset + (curCol * stride + K / 2 - 0.5) * (CELL_SIZE + GAP),
+        3.8,
+        offset + (curRow * stride + K / 2 - 0.5) * (CELL_SIZE + GAP)
+      );
+      group.add(labelSprite);
+
+      return group;
+    }
+
+    // ===== 高亮当前感受野 =====
+    function buildReceptiveFieldHighlight(curRow, curCol) {
+      const group = new THREE.Group();
+      const offset = -(N * (CELL_SIZE + GAP)) / 2;
+
+      // 用线框标识感受野区域
+      const w = K * (CELL_SIZE + GAP) - GAP + 0.1;
+      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 0.3, w));
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffeb3b, linewidth: 2 }));
+      line.position.set(
+        offset + (curCol * stride + (K - 1) / 2) * (CELL_SIZE + GAP),
+        -0.8,
+        offset + (curRow * stride + (K - 1) / 2) * (CELL_SIZE + GAP)
+      );
+      group.add(line);
+
+      return group;
+    }
+
+    // ===== 构建输出特征图（逐元素生成）=====
+    let outputRevealed = 0; // 已揭示的输出元素数
+    function buildOutputFeatureMap() {
+      const group = new THREE.Group();
+      const oN = outSize();
+      const offset = -(oN * (CELL_SIZE + GAP)) / 2;
+      const maxVal = Math.max(...outputData, 0.01);
+
+      for (let idx = 0; idx < oN * oN; idx++) {
+        const i = Math.floor(idx / oN);
+        const j = idx % oN;
+        const val = outputData[idx];
+        const revealed = idx < outputRevealed;
+        const h = Math.max(0.05, val * CELL_HEIGHT_SCALE);
+
+        const geo = new THREE.BoxGeometry(CELL_SIZE * 0.9, revealed ? h : 0.05, CELL_SIZE * 0.9);
+        const mat = new THREE.MeshPhongMaterial({
+          color: revealed ? outputToColor(val, maxVal) : 0x222244,
+          transparent: true,
+          opacity: revealed ? 0.9 : 0.3,
+          shininess: 60
+        });
+        if (revealed && idx === outputRevealed - 1) {
+          mat.emissive = new THREE.Color(0xffeb3b);
+          mat.emissiveIntensity = 0.4;
+        }
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(
+          offset + j * (CELL_SIZE + GAP) + N * (CELL_SIZE + GAP) + 3,
+          (revealed ? h / 2 : 0.025) - 1,
+          offset + i * (CELL_SIZE + GAP)
+        );
+        group.add(mesh);
+      }
+
+      // 输出底板
+      const baseGeo = new THREE.PlaneGeometry(oN * (CELL_SIZE + GAP) + 0.2, oN * (CELL_SIZE + GAP) + 0.2);
+      const baseMat = new THREE.MeshPhongMaterial({ color: 0x1a1a3e, transparent: true, opacity: 0.4 });
+      const base = new THREE.Mesh(baseGeo, baseMat);
+      base.rotation.x = -Math.PI / 2;
+      base.position.set(N * (CELL_SIZE + GAP) / 2 + 3 + 0.2, -1.01, 0);
+      group.add(base);
+
+      // 标签
+      const labelSprite = makeTextSprite('Output Feature Map', '#ff9800');
+      labelSprite.position.set(N * (CELL_SIZE + GAP) / 2 + 3 + 0.2, -1.5, -oN * (CELL_SIZE + GAP) / 2 - 0.8);
+      group.add(labelSprite);
+
+      return group;
+    }
+
+    // ===== 连接线：核到输出的箭头 =====
+    function buildConnectionLine(curRow, curCol) {
+      const group = new THREE.Group();
+      const oN = outSize();
+      const inputOffset = -(N * (CELL_SIZE + GAP)) / 2;
+      const outputOffset = -(oN * (CELL_SIZE + GAP)) / 2;
+
+      const outputIdx = curRow * oN + curCol;
+      if (outputIdx >= outputRevealed) return group;
+
+      // 从核中心到输出对应位置
+      const startX = inputOffset + (curCol * stride + (K - 1) / 2) * (CELL_SIZE + GAP);
+      const startY = 2.5;
+      const startZ = inputOffset + (curRow * stride + (K - 1) / 2) * (CELL_SIZE + GAP);
+
+      const endX = outputOffset + curCol * (CELL_SIZE + GAP) + N * (CELL_SIZE + GAP) + 3 + 0.2;
+      const endY = 0.5;
+      const endZ = outputOffset + curRow * (CELL_SIZE + GAP);
+
+      const curve = new THREE.CubicBezierCurve3(
+        new THREE.Vector3(startX, startY, startZ),
+        new THREE.Vector3(startX + 1.5, startY + 0.5, startZ),
+        new THREE.Vector3(endX - 1.5, endY + 0.5, endZ),
+        new THREE.Vector3(endX, endY, endZ)
+      );
+      const points = curve.getPoints(30);
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0.6 });
+      const line = new THREE.Line(geo, mat);
+      group.add(line);
+
+      return group;
+    }
+
+    // ===== 文字Sprite =====
+    function makeTextSprite(text, color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.font = 'bold 32px Microsoft YaHei, sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 256, 40);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(5, 0.6, 1);
+      return sprite;
+    }
+
+    // ===== 动画状态 =====
+    let playing = false;
+    let paused = false;
+    let stepMode = false;
+    let currentRow = 0, currentCol = 0;
+    let progress = 0; // 0-1 当前格子内的插值进度
+    const STEP_DURATION = 0.8; // 秒，每步基准时长
+    let totalSteps = 0;
+    let elapsedTime = 0;
+
+    function resetAnimation() {
+      currentRow = 0;
+      currentCol = 0;
+      progress = 0;
+      outputRevealed = 0;
+      elapsedTime = 0;
+      totalSteps = 0;
+      rebuildScene();
+      updateInfoOverlay();
+    }
+
+    function rebuildScene() {
+      clearGroup(convGroup);
+      convGroup.add(buildInputFeatureMap());
+      convGroup.add(buildKernel(currentRow, currentCol));
+      convGroup.add(buildReceptiveFieldHighlight(currentRow, currentCol));
+      convGroup.add(buildOutputFeatureMap());
+      convGroup.add(buildConnectionLine(currentRow, currentCol));
+    }
+
+    // ===== 数值标签层（HTML overlay）=====
+    function updateInfoOverlay() {
+      const oN = outSize();
+      document.getElementById('info-input').textContent = `${N}×${N}×1`;
+      document.getElementById('info-kernel').textContent = `${K}×${K}`;
+      document.getElementById('info-stride-pad').textContent = `${stride} / ${padding}`;
+      document.getElementById('info-output').textContent = `${oN}×${oN}×1`;
+
+      if (playing || outputRevealed > 0) {
+        const oN = outSize();
+        if (currentRow < oN && currentCol < oN) {
+          const idx = currentRow * oN + currentCol;
+          const val = outputData[idx];
+          document.getElementById('info-current').textContent = `(${currentRow}, ${currentCol}) = ${val.toFixed(3)}`;
+        } else {
+          document.getElementById('info-current').textContent = '完成';
+        }
+      } else {
+        document.getElementById('info-current').textContent = '(-, -)';
+      }
+    }
+
+    // ===== 动画循环 =====
+    let lastTime = 0;
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      let dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      dt = clamp(dt, 0, 0.05);
+
+      if (playing && !paused) {
+        const effectiveSpeed = animSpeed;
+        progress += (dt / STEP_DURATION) * effectiveSpeed;
+        elapsedTime += dt;
+
+        if (progress >= 1) {
+          progress = 0;
+          // 核滑动到下一个位置
+          outputRevealed++;
+          const oN = outSize();
+          currentCol++;
+          if (currentCol >= oN) {
+            currentCol = 0;
+            currentRow++;
+          }
+          totalSteps++;
+
+          if (currentRow >= oN) {
+            // 排序完成
+            playing = false;
+            paused = false;
+            document.getElementById('btn-play').disabled = false;
+            document.getElementById('btn-pause').disabled = true;
+            currentRow = oN - 1;
+            currentCol = oN - 1;
+            outputRevealed = oN * oN;
+          }
+          rebuildScene();
+          updateInfoOverlay();
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // ===== resize处理 =====
+    window.addEventListener('resize', () => {
+      const w = canvasArea.clientWidth, h = canvasArea.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+
+    // ===== 控件绑定 =====
+    function readParams() {
+      N = parseInt(document.getElementById('sl-n').value);
+      K = parseInt(document.getElementById('sl-k').value);
+      stride = parseInt(document.getElementById('sl-stride').value);
+      padding = parseInt(document.getElementById('sl-pad').value);
+      animSpeed = parseFloat(document.getElementById('sl-speed').value);
+
+      // 验证参数有效性
+      const oN = outSize();
+      if (oN <= 0) {
+        // 修正参数
+        if (K > N + 2 * padding) {
+          K = Math.min(K, N + 2 * padding);
+          document.getElementById('sl-k').value = K;
+        }
+      }
+    }
+
+    function onParamChange() {
+      readParams();
+      document.getElementById('lbl-n').textContent = N;
+      document.getElementById('lbl-k').textContent = K;
+      document.getElementById('lbl-stride').textContent = stride;
+      document.getElementById('lbl-pad').textContent = padding;
+      document.getElementById('lbl-speed').textContent = animSpeed.toFixed(1);
+      playing = false;
+      paused = false;
+      generateData();
+      resetAnimation();
+    }
+
+    document.getElementById('sl-n').addEventListener('input', onParamChange);
+    document.getElementById('sl-k').addEventListener('input', onParamChange);
+    document.getElementById('sl-stride').addEventListener('input', onParamChange);
+    document.getElementById('sl-pad').addEventListener('input', onParamChange);
+    document.getElementById('sl-speed').addEventListener('input', function () {
+      animSpeed = parseFloat(this.value);
+      document.getElementById('lbl-speed').textContent = animSpeed.toFixed(1);
+    });
+
+    document.getElementById('btn-play').addEventListener('click', function () {
+      if (!playing) {
+        const oN = outSize();
+        if (oN <= 0) return;
+        if (outputRevealed >= oN * oN) resetAnimation();
+        generateData();
+        if (outputRevealed === 0) rebuildScene();
+        playing = true;
+        paused = false;
+        this.disabled = true;
+        document.getElementById('btn-pause').disabled = false;
+      }
+    });
+
+    document.getElementById('btn-pause').addEventListener('click', function () {
+      paused = true;
+      this.disabled = true;
+      document.getElementById('btn-play').disabled = false;
+    });
+
+    document.getElementById('btn-step').addEventListener('click', function () {
+      if (!playing) {
+        const oN = outSize();
+        if (oN <= 0) return;
+        if (outputRevealed >= oN * oN) resetAnimation();
+        generateData();
+        if (outputRevealed === 0) rebuildScene();
+        playing = true;
+        paused = false;
+      }
+      // 单步：推进一个位置
+      progress = 0;
+      outputRevealed++;
+      const oN = outSize();
+      currentCol++;
+      if (currentCol >= oN) { currentCol = 0; currentRow++; }
+      if (currentRow >= oN) {
+        currentRow = oN - 1;
+        currentCol = oN - 1;
+        outputRevealed = oN * oN;
+        playing = false;
+        paused = false;
+        document.getElementById('btn-play').disabled = false;
+        document.getElementById('btn-pause').disabled = true;
+      }
+      rebuildScene();
+      updateInfoOverlay();
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', function () {
+      playing = false;
+      paused = false;
+      document.getElementById('btn-play').disabled = false;
+      document.getElementById('btn-pause').disabled = true;
+      generateData();
+      resetAnimation();
+    });
+
+    // 侧边栏折叠
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    const sidebar = document.getElementById('sidebar');
+    sidebarToggle.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+    if (window.innerWidth < 600) sidebar.classList.add('collapsed');
+
+    // ===== KaTeX公式 =====
+    setTimeout(() => {
+      const el = document.getElementById('formula-display');
+      if (el && typeof katex !== 'undefined') {
+        el.innerHTML = `
+          <div style="margin-bottom:8px" id="f1"></div>
+          <div style="margin-bottom:8px" id="f2"></div>
+          <div style="margin-bottom:8px;font-size:12px;color:#aaa;">输出尺寸公式</div>
+          <div style="margin-bottom:6px" id="f3"></div>
+        `;
+        try {
+          katex.render('y_{i,j} = \\sum_{m=0}^{K-1}\\sum_{n=0}^{K-1} w_{m,n} \\cdot x_{i\\cdot s+m,\\, j\\cdot s+n} + b', document.getElementById('f1'), { throwOnError: false, displayMode: true });
+          katex.render('y = \\text{ReLU}(y)', document.getElementById('f2'), { throwOnError: false, displayMode: true });
+          katex.render('O = \\lfloor\\frac{N - K + 2P}{S}\\rfloor + 1', document.getElementById('f3'), { throwOnError: false, displayMode: true });
+        } catch (e) {}
+      }
+    }, 500);
+
+    // ===== 初始化 =====
+    rebuildScene();
+    updateInfoOverlay();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
